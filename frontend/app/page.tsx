@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Image from "next/image";
 
 // Add type declarations for Web Bluetooth API
 declare global {
@@ -66,15 +65,19 @@ export default function Home() {
   const [isConnected, setIsConnected] = useState(false);
   const [device, setDevice] = useState<BluetoothDevice | null>(null);
   const [gattServer, setGattServer] = useState<BluetoothRemoteGATTServer | null>(null);
-  const [wifiName, setWifiName] = useState("");
-  const [wifiPassword, setWifiPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [serviceUUID, setServiceUUID] = useState<string | null>(null);
   const [debug, setDebug] = useState<string[]>([]);
+  const [isDebugVisible, setIsDebugVisible] = useState(false);
+  const [wifiStatus, setWifiStatus] = useState<{
+    connected: boolean;
+    ip?: string;
+    message?: string;
+  } | null>(null);
 
   // Get environment variables
-  const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Flashlight Setup';
+  const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Device Setup';
   const deviceNamePrefix = process.env.NEXT_PUBLIC_DEVICE_NAME_PREFIX || 'ESP32';
   
   // Nordic UART Service UUID constants - these are the standard UUIDs used by Adafruit BLE
@@ -82,13 +85,30 @@ export default function Home() {
   const UART_RX_CHARACTERISTIC_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';  // RX from the device's perspective (write from central)
   const UART_TX_CHARACTERISTIC_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';  // TX from the device's perspective (read from central)
   
-  const connectionTimeout = parseInt(process.env.NEXT_PUBLIC_CONNECTION_TIMEOUT_MS || '10000');
-
   // Check if Web Bluetooth is supported
   const [isBluetoothSupported, setIsBluetoothSupported] = useState(false);
 
   useEffect(() => {
     setIsBluetoothSupported('bluetooth' in navigator);
+  }, []);
+
+  // Add keyboard event listener for Ctrl+K to toggle debug log
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Check for Ctrl+K
+      if (event.ctrlKey && event.key === 'k') {
+        event.preventDefault(); // Prevent default browser behavior
+        setIsDebugVisible(prev => !prev); // Toggle debug visibility
+      }
+    };
+
+    // Add event listener
+    window.addEventListener('keydown', handleKeyDown);
+
+    // Cleanup event listener when component unmounts
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   // Helper function to add debug messages
@@ -160,10 +180,53 @@ export default function Home() {
           const txChar = await uartService.getCharacteristic(UART_TX_CHARACTERISTIC_UUID);
           addDebug(`TX characteristic found: ${txChar.uuid}`);
           
-          setSuccessMessage('Connected and ready to send WiFi credentials!');
+          // Set up notification handler for incoming messages
+          if (txChar.properties.notify) {
+            addDebug('Setting up notification listener on TX characteristic...');
+            await txChar.startNotifications();
+            txChar.addEventListener('characteristicvaluechanged', (event: Event) => {
+              // Type-cast event.target with a safer approach
+              const target = event.target as unknown;
+              // Now it's safe to cast to our expected type
+              const characteristic = target as BluetoothRemoteGATTCharacteristic & { value: DataView };
+              const value = characteristic.value;
+              const decoder = new TextDecoder('utf-8');
+              const response = decoder.decode(value);
+              addDebug(`Received response: ${response}`);
+              
+              try {
+                const responseData = JSON.parse(response);
+                if (responseData.status === 'success') {
+                  setSuccessMessage(responseData.message || 'Operation successful!');
+                  if (responseData.ip) {
+                    setWifiStatus({
+                      connected: true,
+                      ip: responseData.ip,
+                      message: responseData.message
+                    });
+                  }
+                } else if (responseData.status === 'error') {
+                  setError(responseData.message || 'Operation failed');
+                  setWifiStatus({
+                    connected: false,
+                    message: responseData.message
+                  });
+                }
+              } catch {
+                // No parameter needed when not using it
+                addDebug(`Response was not JSON: ${response}`);
+              }
+            });
+          } else {
+            addDebug('TX characteristic does not support notifications');
+          }
+          
+          // Request initial WiFi status
+          await requestWifiStatus();
+          
+          setSuccessMessage('Connected and ready to monitor device!');
         } catch (err) {
           addDebug(`Error accessing UART service: ${err instanceof Error ? err.message : String(err)}`);
-          // We'll handle this in the sendWifiCredentials function
         }
 
         // Setup disconnect listener
@@ -172,6 +235,7 @@ export default function Home() {
           setIsConnected(false);
           setGattServer(null);
           setServiceUUID(null);
+          setWifiStatus(null);
           setSuccessMessage(null);
           setError("Device disconnected. Please reconnect and try again.");
         });
@@ -193,14 +257,10 @@ export default function Home() {
     }
   };
 
-  const sendWifiCredentials = async () => {
-    if (!device) {
+  // Function to request WiFi status
+  const requestWifiStatus = async () => {
+    if (!device || !gattServer?.connected) {
       setError("No device connected");
-      return;
-    }
-
-    if (!wifiName || !wifiPassword) {
-      setError("Please enter both WiFi name and password");
       return;
     }
 
@@ -208,77 +268,68 @@ export default function Home() {
       setIsConnecting(true);
       setError(null);
       
-      // Check if we need to reconnect
-      let server = gattServer;
-      if (!server || !server.connected) {
-        addDebug('GATT Server not connected, attempting to connect...');
-        const newServer = await device.gatt?.connect();
-        if (!newServer) {
-          throw new Error('Failed to connect to GATT server');
-        }
-        server = newServer;
-        setGattServer(newServer);
-      }
-      
       addDebug(`Getting UART service: ${UART_SERVICE_UUID}`);
-      const service = await server.getPrimaryService(UART_SERVICE_UUID);
+      const service = await gattServer.getPrimaryService(UART_SERVICE_UUID);
       
       addDebug(`Getting RX characteristic: ${UART_RX_CHARACTERISTIC_UUID}`);
       const rxCharacteristic = await service.getCharacteristic(UART_RX_CHARACTERISTIC_UUID);
       
-      // Create the WiFi credentials data
-      const wifiData = JSON.stringify({
-        ssid: wifiName,
-        password: wifiPassword
+      // Create the command data
+      const commandData = JSON.stringify({
+        command: 'wifi_status'
       });
       
       // Convert the string to bytes
       const encoder = new TextEncoder();
-      const wifiDataBytes = encoder.encode(wifiData);
+      const commandBytes = encoder.encode(commandData);
       
-      addDebug(`Sending data: ${wifiData}`);
+      addDebug(`Sending command: ${commandData}`);
       // Send the data
-      await rxCharacteristic.writeValue(wifiDataBytes);
-      
-      setSuccessMessage("WiFi credentials sent successfully!");
-      
-      // Optional: Set up listener for response from device
-      try {
-        addDebug(`Getting TX characteristic: ${UART_TX_CHARACTERISTIC_UUID}`);
-        const txCharacteristic = await service.getCharacteristic(UART_TX_CHARACTERISTIC_UUID);
-        
-        if (txCharacteristic.properties.notify) {
-          addDebug('Setting up notification listener on TX characteristic...');
-          await txCharacteristic.startNotifications();
-          txCharacteristic.addEventListener('characteristicvaluechanged', (event: Event) => {
-            // Type-cast event.target with a safer approach
-            const target = event.target as unknown;
-            // Now it's safe to cast to our expected type
-            const characteristic = target as BluetoothRemoteGATTCharacteristic & { value: DataView };
-            const value = characteristic.value;
-            const decoder = new TextDecoder('utf-8');
-            const response = decoder.decode(value);
-            addDebug(`Received response: ${response}`);
-            try {
-              const responseData = JSON.parse(response);
-              if (responseData.status === 'success') {
-                setSuccessMessage(responseData.message || 'WiFi credentials received by device!');
-              }
-            } catch (e) {
-              addDebug(`Response was not JSON: ${response}`);
-            }
-          });
-        } else {
-          addDebug('TX characteristic does not support notifications');
-        }
-      } catch (e) {
-        addDebug(`Could not set up notifications: ${e instanceof Error ? e.message : String(e)}`);
-        // This is optional, so we just log and continue
-      }
+      await rxCharacteristic.writeValue(commandBytes);
       
     } catch (err) {
-      console.error('Error sending WiFi credentials:', err);
-      setError(`Failed to send WiFi credentials: ${err instanceof Error ? err.message : String(err)}`);
+      console.error('Error requesting WiFi status:', err);
+      setError(`Failed to request WiFi status: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  // Function to restart WiFi connection
+  const restartWifi = async () => {
+    if (!device || !gattServer?.connected) {
+      setError("No device connected");
+      return;
+    }
+
+    try {
+      setIsConnecting(true);
+      setError(null);
+      
+      addDebug(`Getting UART service: ${UART_SERVICE_UUID}`);
+      const service = await gattServer.getPrimaryService(UART_SERVICE_UUID);
+      
+      addDebug(`Getting RX characteristic: ${UART_RX_CHARACTERISTIC_UUID}`);
+      const rxCharacteristic = await service.getCharacteristic(UART_RX_CHARACTERISTIC_UUID);
+      
+      // Create the command data
+      const commandData = JSON.stringify({
+        command: 'restart_wifi'
+      });
+      
+      // Convert the string to bytes
+      const encoder = new TextEncoder();
+      const commandBytes = encoder.encode(commandData);
+      
+      addDebug(`Sending command: ${commandData}`);
+      // Send the data
+      await rxCharacteristic.writeValue(commandBytes);
+      
+      setSuccessMessage("WiFi restart command sent!");
+      
+    } catch (err) {
+      console.error('Error restarting WiFi:', err);
+      setError(`Failed to restart WiFi: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsConnecting(false);
     }
@@ -290,7 +341,7 @@ export default function Home() {
         <div className="flex flex-col items-center mb-8">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{appName}</h1>
           <p className="text-sm text-gray-600 dark:text-gray-300 text-center">
-            Connect to your Flashlight via Bluetooth and send WiFi credentials
+            Connect to your device and monitor WiFi status
           </p>
         </div>
 
@@ -312,15 +363,31 @@ export default function Home() {
           </div>
         )}
 
-        {/* Add debug information section */}
+        {/* WiFi Status Display */}
+        {wifiStatus && (
+          <div className={`mb-6 p-4 ${wifiStatus.connected ? 
+            'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 
+            'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'} rounded-lg`}>
+            <h3 className="font-medium mb-2">WiFi Status</h3>
+            <p>{wifiStatus.connected ? 'Connected' : 'Disconnected'}</p>
+            {wifiStatus.message && <p className="text-sm mt-1">{wifiStatus.message}</p>}
+            {wifiStatus.ip && <p className="font-mono text-sm mt-1">IP: {wifiStatus.ip}</p>}
+          </div>
+        )}
+
+        {/* Add debug information section with toggle indicator */}
         {debug.length > 0 && (
-          <div className="mt-6 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg text-xs font-mono overflow-auto max-h-60">
-            <h3 className="text-sm font-semibold mb-2">Debug Log:</h3>
-            <ul className="space-y-1">
-              {debug.map((msg, idx) => (
-                <li key={idx}>{msg}</li>
-              ))}
-            </ul>
+          <div className="relative">
+            {isDebugVisible && (
+              <div className="mt-2 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg text-xs font-mono overflow-auto max-h-60">
+                <h3 className="text-sm font-semibold mb-2">Debug Log:</h3>
+                <ul className="space-y-1">
+                  {debug.map((msg, idx) => (
+                    <li key={idx}>{msg}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
 
@@ -330,7 +397,7 @@ export default function Home() {
             disabled={isConnecting || !isBluetoothSupported}
             className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
           >
-            {isConnecting ? 'Pairing...' : 'Pair Flashlight'}
+            {isConnecting ? 'Connecting...' : 'Connect to Device'}
           </button>
         ) : (
           <div className="space-y-4">
@@ -342,40 +409,20 @@ export default function Home() {
             </div>
 
             <div className="space-y-4">
-              <div>
-                <label htmlFor="ssid" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  WiFi Name (SSID)
-                </label>
-                <input
-                  type="text"
-                  id="ssid"
-                  value={wifiName}
-                  onChange={(e) => setWifiName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                  placeholder="Enter WiFi name"
-                />
-              </div>
-              
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  WiFi Password
-                </label>
-                <input
-                  type="password"
-                  id="password"
-                  value={wifiPassword}
-                  onChange={(e) => setWifiPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                  placeholder="Enter WiFi password"
-                />
-              </div>
+              <button
+                onClick={requestWifiStatus}
+                disabled={isConnecting}
+                className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                {isConnecting ? 'Requesting...' : 'Refresh WiFi Status'}
+              </button>
               
               <button
-                onClick={sendWifiCredentials}
-                disabled={isConnecting || !wifiName || !wifiPassword}
-                className="w-full py-3 px-4 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                onClick={restartWifi}
+                disabled={isConnecting}
+                className="w-full py-3 px-4 bg-yellow-600 hover:bg-yellow-700 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-opacity-50 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
               >
-                {isConnecting ? 'Sending...' : 'Send WiFi Credentials'}
+                {isConnecting ? 'Restarting...' : 'Restart WiFi Connection'}
               </button>
             </div>
           </div>
@@ -383,7 +430,12 @@ export default function Home() {
       </main>
       
       <footer className="mt-8 text-center text-sm text-gray-500 dark:text-gray-400">
-        <p>Make sure your Flashlight is on and within range.</p>
+        <p>WiFi credentials are configured in settings.toml on the device.</p>
+        {debug.length > 0 && (
+          <p className="mt-1 cursor-pointer hover:underline" onClick={() => setIsDebugVisible(prev => !prev)}>
+            {isDebugVisible ? 'Hide' : 'Show'} Debug Log (Ctrl+K)
+          </p>
+        )}
       </footer>
     </div>
   );
