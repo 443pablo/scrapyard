@@ -164,7 +164,6 @@ export default function Home() {
         
         setGattServer(server);
         setIsConnected(true);
-        setSuccessMessage(`Connected to ${bluetoothDevice.name || 'device'}!`);
         
         // Now try to get the UART service
         addDebug(`Getting UART service with UUID: ${UART_SERVICE_UUID}`);
@@ -224,7 +223,7 @@ export default function Home() {
           // Request initial WiFi status
           await requestWifiStatus();
           
-          setSuccessMessage('Connected and ready to monitor device!');
+          setSuccessMessage('Ready to monitor device!');
         } catch (err) {
           addDebug(`Error accessing UART service: ${err instanceof Error ? err.message : String(err)}`);
         }
@@ -351,17 +350,24 @@ export default function Home() {
           </div>
         )}
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg text-sm">
-            <p>{error}</p>
-          </div>
-        )}
-
-        {successMessage && (
-          <div className="mb-6 p-4 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg text-sm">
-            <p>{successMessage}</p>
-          </div>
-        )}
+        {/* Device Connection Status */}
+        <div className="mb-6">
+          {isConnected ? (
+            <div className="p-4 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg text-sm">
+              <div className="flex items-center space-x-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="font-medium">Connected to {device?.name || 'device'}</span>
+              </div>
+              {successMessage && <p className="mt-2">{successMessage}</p>}
+            </div>
+          ) : error ? (
+            <div className="p-4 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg text-sm">
+              <p>{error}</p>
+            </div>
+          ) : null}
+        </div>
 
         {/* WiFi Status Display */}
         {wifiStatus && (
@@ -401,13 +407,6 @@ export default function Home() {
           </button>
         ) : (
           <div className="space-y-4">
-            <div className="flex items-center space-x-2 mb-4 text-green-600 dark:text-green-400">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              <span>Connected to {device?.name || 'device'}</span>
-            </div>
-
             <div className="space-y-4">
               <button
                 onClick={requestWifiStatus}
