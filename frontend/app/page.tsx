@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// Add type declarations for Web Bluetooth API
+// Add type declarations for Web Bluetooth API and Web Speech API
 declare global {
   interface Navigator {
     bluetooth: {
@@ -14,7 +15,49 @@ declare global {
         }>;
         optionalServices?: string[];
       }): Promise<BluetoothDevice>;
-    }
+    };
+  }
+  
+  // Simplified Speech Recognition Types
+  interface Window {
+    SpeechRecognition: SpeechRecognitionConstructor;
+    webkitSpeechRecognition: SpeechRecognitionConstructor;
+    currentRecognition: SpeechRecognitionInstance | null;
+  }
+  
+  // Custom types for Speech Recognition
+  interface SpeechRecognitionConstructor {
+    new(): SpeechRecognitionInstance;
+  }
+  
+  interface SpeechRecognitionInstance {
+    continuous: boolean;
+    interimResults: boolean;
+    lang: string;
+    start(): void;
+    stop(): void;
+    abort(): void;
+    onresult: (event: SpeechRecognitionResultEvent) => void;
+    onerror: (event: SpeechRecognitionErrorEvent) => void;
+    onend: () => void;
+  }
+  
+  interface SpeechRecognitionResultEvent {
+    results: {
+      readonly length: number;
+      [index: number]: {
+        readonly isFinal: boolean;
+        readonly length: number;
+        [index: number]: {
+          readonly transcript: string;
+          readonly confidence: number;
+        };
+      };
+    };
+  }
+  
+  interface SpeechRecognitionErrorEvent {
+    error: string;
   }
 
   interface BluetoothDevice {
@@ -67,7 +110,6 @@ export default function Home() {
   const [gattServer, setGattServer] = useState<BluetoothRemoteGATTServer | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [serviceUUID, setServiceUUID] = useState<string | null>(null);
   const [debug, setDebug] = useState<string[]>([]);
   const [isDebugVisible, setIsDebugVisible] = useState(false);
   const [wifiStatus, setWifiStatus] = useState<{
@@ -75,30 +117,60 @@ export default function Home() {
     ip?: string;
     message?: string;
   } | null>(null);
+  
+  // New states for Gemini integration
+  const [isListening, setIsListening] = useState(false);
+  const [transcript, setTranscript] = useState('');
+  const [geminiResponse, setGeminiResponse] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  
+  // New state for controlling transcript clearing behavior
+  const [autoClearTranscript, setAutoClearTranscript] = useState(false);
 
   // Get environment variables
   const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Device Setup';
   const deviceNamePrefix = process.env.NEXT_PUBLIC_DEVICE_NAME_PREFIX || 'ESP32';
+  const geminiApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+  const geminiModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || 'gemini-1.5-pro';
   
   // Nordic UART Service UUID constants - these are the standard UUIDs used by Adafruit BLE
   const UART_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
   const UART_RX_CHARACTERISTIC_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';  // RX from the device's perspective (write from central)
   const UART_TX_CHARACTERISTIC_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';  // TX from the device's perspective (read from central)
   
+  // Initialize Gemini API
+  const genAI = new GoogleGenerativeAI(geminiApiKey);
+  
   // Check if Web Bluetooth is supported
   const [isBluetoothSupported, setIsBluetoothSupported] = useState(false);
+  // Check if Web Speech API is supported
+  const [isSpeechSupported, setIsSpeechSupported] = useState(false);
+
+  // Reference to store the recognition instance
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  
+  // Reference to track the last final transcript
+  const lastTranscriptRef = useRef<string>('');
 
   useEffect(() => {
     setIsBluetoothSupported('bluetooth' in navigator);
+    setIsSpeechSupported('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
   }, []);
 
-  // Add keyboard event listener for Ctrl+K to toggle debug log
+  // Add keyboard event listeners for debug toggle (Ctrl+K) and autoclear toggle (Ctrl+L)
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Check for Ctrl+K
+      // Check for Ctrl+K to toggle debug
       if (event.ctrlKey && event.key === 'k') {
         event.preventDefault(); // Prevent default browser behavior
         setIsDebugVisible(prev => !prev); // Toggle debug visibility
+      }
+      
+      // Check for Ctrl+L to toggle autoclear behavior
+      if (event.ctrlKey && event.key === 'l') {
+        event.preventDefault(); // Prevent default browser behavior
+        setAutoClearTranscript(prev => !prev); // Toggle autoclear setting
+        addDebug(`Toggled auto-clear transcript: ${!autoClearTranscript ? 'ON' : 'OFF'}`);
       }
     };
 
@@ -109,7 +181,7 @@ export default function Home() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
+  }, [autoClearTranscript]); // Include autoClearTranscript in dependencies for the debug message
 
   // Helper function to add debug messages
   const addDebug = (message: string) => {
@@ -169,7 +241,6 @@ export default function Home() {
         addDebug(`Getting UART service with UUID: ${UART_SERVICE_UUID}`);
         try {
           const uartService = await server.getPrimaryService(UART_SERVICE_UUID);
-          setServiceUUID(UART_SERVICE_UUID);
           addDebug('UART service found!');
           
           // Test getting the TX and RX characteristics to make sure they exist
@@ -204,133 +275,211 @@ export default function Home() {
                       message: responseData.message
                     });
                   }
-                } else if (responseData.status === 'error') {
+                } else {
                   setError(responseData.message || 'Operation failed');
-                  setWifiStatus({
-                    connected: false,
-                    message: responseData.message
-                  });
+                  if (responseData.hasOwnProperty('connected')) {
+                    setWifiStatus({
+                      connected: responseData.connected,
+                      message: responseData.message
+                    });
+                  }
                 }
-              } catch {
-                // No parameter needed when not using it
-                addDebug(`Response was not JSON: ${response}`);
+              } catch (e) {
+                addDebug(`Error parsing JSON response: ${e}`);
+                // Still show the raw response
+                setSuccessMessage(`Received: ${response}`);
               }
             });
+            
+            setSuccessMessage('Connected and ready!');
           } else {
-            addDebug('TX characteristic does not support notifications');
+            addDebug('TX characteristic does not support notifications!');
           }
           
-          // Request initial WiFi status
-          await requestWifiStatus();
-          
-          setSuccessMessage('Ready to monitor device!');
         } catch (err) {
-          addDebug(`Error accessing UART service: ${err instanceof Error ? err.message : String(err)}`);
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          addDebug(`Error getting UART service: ${errorMessage}`);
+          
+          // Try to list all available services for debugging
+          try {
+            const services = await server.getPrimaryServices();
+            addDebug(`Found ${services.length} services:`);
+            for (const service of services) {
+              addDebug(`Service UUID: ${service.uuid}`);
+            }
+          } catch (e) {
+            addDebug(`Error listing services: ${e instanceof Error ? e.message : String(e)}`);
+          }
+          
+          throw new Error(`Failed to get UART service: ${errorMessage}`);
         }
-
-        // Setup disconnect listener
-        bluetoothDevice.addEventListener('gattserverdisconnected', () => {
-          addDebug('GATT Server disconnected');
-          setIsConnected(false);
-          setGattServer(null);
-          setServiceUUID(null);
-          setWifiStatus(null);
-          setSuccessMessage(null);
-          setError("Device disconnected. Please reconnect and try again.");
-        });
-
       } catch (err) {
-        addDebug(`Error with specific connection attempt: ${err instanceof Error ? err.message : String(err)}`);
-        throw err;
+        throw new Error(`Bluetooth connection error: ${err instanceof Error ? err.message : String(err)}`);
       }
     } catch (err) {
       console.error('Error connecting to device:', err);
-      // Check for user cancellation with a more friendly message
-      if (err instanceof Error && err.message.includes('cancelled the requestDevice() chooser')) {
-        setError('Device selection cancelled. You can try again when ready!');
-      } else {
-        setError(`Failed to connect: ${err instanceof Error ? err.message : String(err)}`);
+      setError(`${err instanceof Error ? err.message : String(err)}`);
+      setIsConnected(false);
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  // Function to toggle microphone recording
+  const toggleMicrophone = async () => {
+    if (!isListening) {
+      startListening();
+    } else {
+      stopListening();
+    }
+  };
+
+  // Function to start listening with microphone
+  const startListening = async () => {
+    try {
+      setIsListening(true);
+      
+      // Only clear transcript if auto-clearing is enabled
+      if (autoClearTranscript) {
+        setTranscript('');
+        lastTranscriptRef.current = '';
       }
-    } finally {
-      setIsConnecting(false);
+      
+      setGeminiResponse('');
+      
+      // Use Web Speech API directly
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.continuous = true; // Set to continuous so it doesn't stop after first utterance
+        recognition.interimResults = true; // Enable interim results for real-time updates
+        
+        recognition.onresult = async (event: SpeechRecognitionResultEvent) => {
+          // Get the latest result
+          const current = event.results.length - 1;
+          const speechResult = event.results[current][0].transcript;
+          
+          // Update the transcript in real-time
+          setTranscript(speechResult);
+          
+          // Only process with Gemini if this is a final result (not an interim)
+          if (event.results[current].isFinal) {
+            addDebug(`Final speech recognized: ${speechResult}`);
+            
+            // Save the latest final transcript
+            lastTranscriptRef.current = speechResult;
+            
+            // Now send to Gemini API
+            await sendToGemini(speechResult);
+          }
+        };
+        
+        recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+          console.error('Speech recognition error:', event.error);
+          
+          // Don't stop listening on "no-speech" errors, just log them
+          if (event.error === 'no-speech') {
+            addDebug('No speech detected, continuing to listen...');
+            return;
+          }
+          
+          // For network errors, provide more helpful message
+          if (event.error === 'network') {
+            setError(`Speech recognition network error. Make sure you're using Chrome and have a stable internet connection.`);
+          } else {
+            setError(`Speech recognition error: ${event.error}`);
+          }
+          
+          // Stop listening on error (except no-speech)
+          setIsListening(false);
+        };
+        
+        // When recognition ends for any reason other than us stopping it manually,
+        // restart it if we're still in listening mode
+        recognition.onend = () => {
+          // If we're still supposed to be listening, restart recognition
+          if (isListening) {
+            try {
+              // If auto-clear is enabled, clear the transcript between recognition sessions
+              if (autoClearTranscript) {
+                setTranscript('');
+              }
+              
+              recognition.start();
+              addDebug('Restarted speech recognition');
+            } catch (error) {
+              console.error('Error restarting recognition:', error);
+              setIsListening(false);
+            }
+          }
+        };
+        
+        // Store recognition instance in ref to access in stopListening
+        recognitionRef.current = recognition;
+        
+        // Start recognition
+        recognition.start();
+        addDebug(`Started continuous speech recognition with ${autoClearTranscript ? 'auto-clear enabled' : 'auto-clear disabled'}`);
+      } else {
+        // Fallback for browsers that don't support SpeechRecognition
+        setError('Speech recognition is not supported in this browser');
+        setIsListening(false);
+      }
+    } catch (error) {
+      console.error('Error starting speech recognition:', error);
+      setError(`Speech recognition error: ${error instanceof Error ? error.message : String(error)}`);
+      setIsListening(false);
     }
   };
 
-  // Function to request WiFi status
-  const requestWifiStatus = async () => {
-    if (!device || !gattServer?.connected) {
-      setError("No device connected");
-      return;
-    }
-
-    try {
-      setIsConnecting(true);
-      setError(null);
+  // Function to stop listening
+  const stopListening = () => {
+    setIsListening(false);
+    
+    // Access and stop the recognition instance if it exists
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+        addDebug('Stopped speech recognition');
+      } catch (e) {
+        console.error('Error stopping recognition:', e);
+      }
       
-      addDebug(`Getting UART service: ${UART_SERVICE_UUID}`);
-      const service = await gattServer.getPrimaryService(UART_SERVICE_UUID);
-      
-      addDebug(`Getting RX characteristic: ${UART_RX_CHARACTERISTIC_UUID}`);
-      const rxCharacteristic = await service.getCharacteristic(UART_RX_CHARACTERISTIC_UUID);
-      
-      // Create the command data
-      const commandData = JSON.stringify({
-        command: 'wifi_status'
-      });
-      
-      // Convert the string to bytes
-      const encoder = new TextEncoder();
-      const commandBytes = encoder.encode(commandData);
-      
-      addDebug(`Sending command: ${commandData}`);
-      // Send the data
-      await rxCharacteristic.writeValue(commandBytes);
-      
-    } catch (err) {
-      console.error('Error requesting WiFi status:', err);
-      setError(`Failed to request WiFi status: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setIsConnecting(false);
+      // Clean up the reference
+      recognitionRef.current = null;
     }
   };
 
-  // Function to restart WiFi connection
-  const restartWifi = async () => {
-    if (!device || !gattServer?.connected) {
-      setError("No device connected");
-      return;
-    }
-
+  // Send transcript to Gemini API
+  const sendToGemini = async (text: string) => {
     try {
-      setIsConnecting(true);
-      setError(null);
+      setIsProcessing(true);
+      addDebug(`Sending to Gemini API: ${text}`);
       
-      addDebug(`Getting UART service: ${UART_SERVICE_UUID}`);
-      const service = await gattServer.getPrimaryService(UART_SERVICE_UUID);
+      // Make sure we have an API key
+      if (!geminiApiKey) {
+        throw new Error('Gemini API key is not configured. Please add it to your .env.local file.');
+      }
       
-      addDebug(`Getting RX characteristic: ${UART_RX_CHARACTERISTIC_UUID}`);
-      const rxCharacteristic = await service.getCharacteristic(UART_RX_CHARACTERISTIC_UUID);
+      // Get the model
+      const model = genAI.getGenerativeModel({ model: geminiModel });
       
-      // Create the command data
-      const commandData = JSON.stringify({
-        command: 'restart_wifi'
-      });
+      // Generate content
+      const result = await model.generateContent(text);
+      const response = result.response;
+      const responseText = response.text();
       
-      // Convert the string to bytes
-      const encoder = new TextEncoder();
-      const commandBytes = encoder.encode(commandData);
+      setGeminiResponse(responseText);
+      addDebug(`Received response from Gemini`);
       
-      addDebug(`Sending command: ${commandData}`);
-      // Send the data
-      await rxCharacteristic.writeValue(commandBytes);
+      // You could also implement text-to-speech here to read the response
       
-      setSuccessMessage("WiFi restart command sent!");
-      
-    } catch (err) {
-      console.error('Error restarting WiFi:', err);
-      setError(`Failed to restart WiFi: ${err instanceof Error ? err.message : String(err)}`);
+    } catch (error) {
+      console.error('Error with Gemini API:', error);
+      setError(`Gemini API error: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
-      setIsConnecting(false);
+      setIsProcessing(false);
     }
   };
 
@@ -340,13 +489,19 @@ export default function Home() {
         <div className="flex flex-col items-center mb-8">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{appName}</h1>
           <p className="text-sm text-gray-600 dark:text-gray-300 text-center">
-            Connect to your device and monitor WiFi status
+            Connect to your device and chat with Gemini AI
           </p>
         </div>
 
         {!isBluetoothSupported && (
           <div className="mb-6 p-4 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg text-sm">
             <p>Web Bluetooth is not supported in this browser. Please use Chrome, Edge, or another compatible browser.</p>
+          </div>
+        )}
+
+        {!isSpeechSupported && (
+          <div className="mb-6 p-4 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg text-sm">
+            <p>Speech recognition is not supported in this browser. Please use Chrome, Edge, or another compatible browser.</p>
           </div>
         )}
 
@@ -369,7 +524,78 @@ export default function Home() {
           ) : null}
         </div>
 
-        {/* WiFi Status Display */}
+        {/* Gemini Chat Interface */}
+        {isConnected && (
+          <div className="mb-6">
+            {/* Settings indicator */}
+            <div className="mb-3 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+              <div className="flex items-center space-x-2">
+                <span className={`inline-block w-2 h-2 rounded-full ${autoClearTranscript ? 'bg-green-500' : 'bg-gray-400'}`}></span>
+                <span>Auto-clear on pause {autoClearTranscript ? 'ON' : 'OFF'}</span>
+              </div>
+              <span className="text-xs">(Ctrl+L to toggle)</span>
+            </div>
+            
+            {/* Live transcript with typing indicator if listening */}
+            <div className="mb-4 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+              <h3 className="text-sm font-semibold mb-1">
+                {isListening ? "Listening..." : "You said:"}
+              </h3>
+              <p className="text-sm text-gray-800 dark:text-gray-200 min-h-8">
+                {transcript}
+                {isListening && !isProcessing && (
+                  <span className="inline-block w-1.5 h-4 ml-0.5 bg-gray-600 dark:bg-gray-400 animate-pulse"></span>
+                )}
+              </p>
+            </div>
+            
+            {geminiResponse && (
+              <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <h3 className="text-sm font-semibold mb-1 text-blue-700 dark:text-blue-300">
+                  {isProcessing ? "Gemini is thinking..." : "Gemini says:"}
+                </h3>
+                <p className="text-sm text-gray-800 dark:text-gray-200">{geminiResponse}</p>
+              </div>
+            )}
+            
+            <button
+              onClick={toggleMicrophone}
+              disabled={isProcessing || !isSpeechSupported}
+              className={`w-full py-4 px-4 flex items-center justify-center text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-opacity-50 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors ${
+                isListening 
+                  ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500' 
+                  : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
+              }`}
+            >
+              {isProcessing ? (
+                <span className="flex items-center">
+                  <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Processing...
+                </span>
+              ) : isListening ? (
+                <span className="flex items-center">
+                  <span className="relative flex h-3 w-3 mr-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                  </span>
+                  Stop Listening
+                </span>
+              ) : (
+                <span className="flex items-center">
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                  </svg>
+                  Start Listening
+                </span>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* WiFi Status Display - Kept for informational purposes */}
         {wifiStatus && (
           <div className={`mb-6 p-4 ${wifiStatus.connected ? 
             'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 
@@ -405,35 +631,20 @@ export default function Home() {
           >
             {isConnecting ? 'Connecting...' : 'Connect to Device'}
           </button>
-        ) : (
-          <div className="space-y-4">
-            <div className="space-y-4">
-              <button
-                onClick={requestWifiStatus}
-                disabled={isConnecting}
-                className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-              >
-                {isConnecting ? 'Requesting...' : 'Refresh WiFi Status'}
-              </button>
-              
-              <button
-                onClick={restartWifi}
-                disabled={isConnecting}
-                className="w-full py-3 px-4 bg-yellow-600 hover:bg-yellow-700 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-opacity-50 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-              >
-                {isConnecting ? 'Restarting...' : 'Restart WiFi Connection'}
-              </button>
-            </div>
-          </div>
-        )}
+        ) : null}
       </main>
       
       <footer className="mt-8 text-center text-sm text-gray-500 dark:text-gray-400">
-        <p>WiFi credentials are configured in settings.toml on the device.</p>
+        <p>Powered by Gemini AI</p>
         {debug.length > 0 && (
-          <p className="mt-1 cursor-pointer hover:underline" onClick={() => setIsDebugVisible(prev => !prev)}>
-            {isDebugVisible ? 'Hide' : 'Show'} Debug Log (Ctrl+K)
-          </p>
+          <div className="mt-1 space-y-1">
+            <p className="cursor-pointer hover:underline" onClick={() => setIsDebugVisible(prev => !prev)}>
+              {isDebugVisible ? 'Hide' : 'Show'} Debug Log (Ctrl+K)
+            </p>
+            <p className="cursor-pointer hover:underline" onClick={() => setAutoClearTranscript(prev => !prev)}>
+              Auto-clear on pause: {autoClearTranscript ? 'ON' : 'OFF'} (Ctrl+L)
+            </p>
+          </div>
         )}
       </footer>
     </div>
