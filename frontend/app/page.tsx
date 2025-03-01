@@ -52,6 +52,12 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  // Get environment variables
+  const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Flashlight Setup';
+  const deviceNamePrefix = process.env.NEXT_PUBLIC_DEVICE_NAME_PREFIX || 'RPi';
+  const wifiConfigCharacteristicUuid = process.env.NEXT_PUBLIC_WIFI_CONFIG_CHARACTERISTIC_UUID || '00002a19-0000-1000-8000-00805f9b34fb';
+  const connectionTimeout = parseInt(process.env.NEXT_PUBLIC_CONNECTION_TIMEOUT_MS || '10000');
+
   // Check if Web Bluetooth is supported
   const [isBluetoothSupported, setIsBluetoothSupported] = useState(false);
 
@@ -64,31 +70,33 @@ export default function Home() {
       setIsConnecting(true);
       setError(null);
       
-      // Request the device with a specific service UUID (you'll need to replace this with your Raspberry Pi's service UUID)
+      // Request the device with device name prefix or service UUID
       const bluetoothDevice = await navigator.bluetooth.requestDevice({
         filters: [
-          { services: ['battery_service'] } // Replace with your actual service UUID
-          // Alternatively, you can use: { namePrefix: 'Raspberry Pi' }
+          { namePrefix: deviceNamePrefix }
         ],
-        optionalServices: ['generic_access'] // Add any other services you need
+        // Note: We're using a well-known UUID here, but you should replace it with your actual UUID
+        // from the Raspberry Pi's Bluetooth service
+        optionalServices: ['battery_service'] 
       });
       
       setDevice(bluetoothDevice);
       setIsConnected(true);
-      //setSuccessMessage("Successfully connected to device!");
-      setSuccessMessage(null);
+      setSuccessMessage(`Successfully connected to ${bluetoothDevice.name || 'device'}!`);
 
       // Setup disconnect listener
       bluetoothDevice.addEventListener('gattserverdisconnected', () => {
         setIsConnected(false);
         setDevice(null);
         setSuccessMessage(null);
+        setError("Device disconnected");
       });
 
     } catch (err) {
       console.error('Error connecting to device:', err);
-      if (err instanceof Error && err.message === 'User cancelled the requestDevice() chooser.') {
-        setError('Device selection cancelled. Please try again when ready.');
+      // Check for user cancellation with a more friendly message
+      if (err instanceof Error && err.message.includes('cancelled the requestDevice() chooser')) {
+        setError('Device selection cancelled. You can try again when ready!');
       } else {
         setError(`Failed to connect: ${err instanceof Error ? err.message : String(err)}`);
       }
@@ -112,14 +120,20 @@ export default function Home() {
       setIsConnecting(true);
       setError(null);
       
-      // Connect to the GATT server
-      const server = await device.gatt.connect();
+      // Set timeout for connection attempts
+      const connectPromise = device.gatt.connect();
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Connection timeout')), connectionTimeout)
+      );
       
-      // Get the primary service (replace with your actual service UUID)
-      const service = await server.getPrimaryService('battery_service'); // Replace with your actual service UUID
+      // Connect to the GATT server with timeout
+      const server = await Promise.race([connectPromise, timeoutPromise]) as BluetoothRemoteGATTServer;
       
-      // Get the characteristic (replace with your actual characteristic UUID)
-      const characteristic = await service.getCharacteristic('battery_level'); // Replace with your actual characteristic UUID
+      // Get the primary service (using a standard UUID for demonstration)
+      const service = await server.getPrimaryService('battery_service');
+      
+      // Get the characteristic for WiFi config
+      const characteristic = await service.getCharacteristic(wifiConfigCharacteristicUuid);
       
       // Create the WiFi credentials data
       const wifiData = JSON.stringify({
@@ -147,7 +161,7 @@ export default function Home() {
     <div className="min-h-screen p-8 flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900">
       <main className="w-full max-w-md p-6 bg-white dark:bg-gray-800 rounded-xl shadow-md">
         <div className="flex flex-col items-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Flashlight Setup</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{appName}</h1>
           <p className="text-sm text-gray-600 dark:text-gray-300 text-center">
             Connect to your Flashlight via Bluetooth and send WiFi credentials
           </p>
@@ -155,7 +169,7 @@ export default function Home() {
 
         {!isBluetoothSupported && (
           <div className="mb-6 p-4 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg text-sm">
-            <p>Web Bluetooth is not supported in this browser. Please use Chrome, Edge, or any other chromium based browser.</p>
+            <p>Web Bluetooth is not supported in this browser. Please use Chrome, Edge, or another compatible browser.</p>
           </div>
         )}
 
@@ -177,7 +191,7 @@ export default function Home() {
             disabled={isConnecting || !isBluetoothSupported}
             className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
           >
-            {isConnecting ? 'Connecting...' : 'Pair Flashlight'}
+            {isConnecting ? 'Pairing...' : 'Pair Flashlight'}
           </button>
         ) : (
           <div className="space-y-4">
