@@ -31,15 +31,33 @@ declare global {
   }
 
   interface BluetoothRemoteGATTServer {
+    connected: boolean;
     getPrimaryService(service: string): Promise<BluetoothRemoteGATTService>;
+    getPrimaryServices(): Promise<BluetoothRemoteGATTService[]>;
+    disconnect(): void;
   }
 
   interface BluetoothRemoteGATTService {
+    uuid: string;
     getCharacteristic(characteristic: string): Promise<BluetoothRemoteGATTCharacteristic>;
+    getCharacteristics(): Promise<BluetoothRemoteGATTCharacteristic[]>;
   }
 
   interface BluetoothRemoteGATTCharacteristic {
+    uuid: string;
     writeValue(value: BufferSource): Promise<void>;
+    properties: {
+      notify: boolean;
+      read: boolean;
+      write: boolean;
+      writeWithoutResponse: boolean;
+      indicate: boolean;
+    };
+    startNotifications(): Promise<BluetoothRemoteGATTCharacteristic>;
+    addEventListener(
+      type: string,
+      listener: (event: Event & { target: BluetoothRemoteGATTCharacteristic & { value: DataView } }) => void
+    ): void;
   }
 }
 
@@ -47,15 +65,23 @@ export default function Home() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [device, setDevice] = useState<BluetoothDevice | null>(null);
+  const [gattServer, setGattServer] = useState<BluetoothRemoteGATTServer | null>(null);
   const [wifiName, setWifiName] = useState("");
   const [wifiPassword, setWifiPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [serviceUUID, setServiceUUID] = useState<string | null>(null);
+  const [debug, setDebug] = useState<string[]>([]);
 
   // Get environment variables
   const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Flashlight Setup';
-  const deviceNamePrefix = process.env.NEXT_PUBLIC_DEVICE_NAME_PREFIX || 'RPi';
-  const wifiConfigCharacteristicUuid = process.env.NEXT_PUBLIC_WIFI_CONFIG_CHARACTERISTIC_UUID || '00002a19-0000-1000-8000-00805f9b34fb';
+  const deviceNamePrefix = process.env.NEXT_PUBLIC_DEVICE_NAME_PREFIX || 'ESP32';
+  
+  // Nordic UART Service UUID constants - these are the standard UUIDs used by Adafruit BLE
+  const UART_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+  const UART_RX_CHARACTERISTIC_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';  // RX from the device's perspective (write from central)
+  const UART_TX_CHARACTERISTIC_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';  // TX from the device's perspective (read from central)
+  
   const connectionTimeout = parseInt(process.env.NEXT_PUBLIC_CONNECTION_TIMEOUT_MS || '10000');
 
   // Check if Web Bluetooth is supported
@@ -65,33 +91,95 @@ export default function Home() {
     setIsBluetoothSupported('bluetooth' in navigator);
   }, []);
 
+  // Helper function to add debug messages
+  const addDebug = (message: string) => {
+    console.log(message);
+    setDebug(prev => [...prev, message]);
+  };
+
+  // Cleanup function for when component unmounts
+  useEffect(() => {
+    return () => {
+      // Disconnect any active connections when component unmounts
+      if (gattServer && gattServer.connected) {
+        try {
+          gattServer.disconnect();
+          addDebug('Component unmounting, connection closed');
+        } catch (e) {
+          console.error('Error during cleanup:', e);
+        }
+      }
+    };
+  }, [gattServer]);
+
   const connectToDevice = async () => {
     try {
       setIsConnecting(true);
       setError(null);
+      setDebug([]);
       
-      // Request the device with device name prefix or service UUID
-      const bluetoothDevice = await navigator.bluetooth.requestDevice({
-        filters: [
-          { namePrefix: deviceNamePrefix }
-        ],
-        // Note: We're using a well-known UUID here, but you should replace it with your actual UUID
-        // from the Raspberry Pi's Bluetooth service
-        optionalServices: ['battery_service'] 
-      });
+      addDebug('Requesting Bluetooth device...');
       
-      setDevice(bluetoothDevice);
-      setIsConnected(true);
-      setSuccessMessage(`Successfully connected to ${bluetoothDevice.name || 'device'}!`);
+      // Request the device with the exact UART service UUID
+      try {
+        const bluetoothDevice = await navigator.bluetooth.requestDevice({
+          filters: [
+            { namePrefix: deviceNamePrefix }
+          ],
+          // Only include the exact UART service UUID we know is used by Adafruit BLE
+          optionalServices: [UART_SERVICE_UUID]
+        });
+        
+        setDevice(bluetoothDevice);
+        
+        addDebug(`Device selected: ${bluetoothDevice.name || 'unnamed device'}`);
+        
+        // Immediately try to connect to the GATT server
+        addDebug('Connecting to GATT server...');
+        const server = await bluetoothDevice.gatt?.connect();
+        
+        if (!server) {
+          throw new Error('Failed to connect to GATT server');
+        }
+        
+        setGattServer(server);
+        setIsConnected(true);
+        setSuccessMessage(`Connected to ${bluetoothDevice.name || 'device'}!`);
+        
+        // Now try to get the UART service
+        addDebug(`Getting UART service with UUID: ${UART_SERVICE_UUID}`);
+        try {
+          const uartService = await server.getPrimaryService(UART_SERVICE_UUID);
+          setServiceUUID(UART_SERVICE_UUID);
+          addDebug('UART service found!');
+          
+          // Test getting the TX and RX characteristics to make sure they exist
+          const rxChar = await uartService.getCharacteristic(UART_RX_CHARACTERISTIC_UUID);
+          addDebug(`RX characteristic found: ${rxChar.uuid}`);
+          
+          const txChar = await uartService.getCharacteristic(UART_TX_CHARACTERISTIC_UUID);
+          addDebug(`TX characteristic found: ${txChar.uuid}`);
+          
+          setSuccessMessage('Connected and ready to send WiFi credentials!');
+        } catch (err) {
+          addDebug(`Error accessing UART service: ${err instanceof Error ? err.message : String(err)}`);
+          // We'll handle this in the sendWifiCredentials function
+        }
 
-      // Setup disconnect listener
-      bluetoothDevice.addEventListener('gattserverdisconnected', () => {
-        setIsConnected(false);
-        setDevice(null);
-        setSuccessMessage(null);
-        setError("Device disconnected");
-      });
+        // Setup disconnect listener
+        bluetoothDevice.addEventListener('gattserverdisconnected', () => {
+          addDebug('GATT Server disconnected');
+          setIsConnected(false);
+          setGattServer(null);
+          setServiceUUID(null);
+          setSuccessMessage(null);
+          setError("Device disconnected. Please reconnect and try again.");
+        });
 
+      } catch (err) {
+        addDebug(`Error with specific connection attempt: ${err instanceof Error ? err.message : String(err)}`);
+        throw err;
+      }
     } catch (err) {
       console.error('Error connecting to device:', err);
       // Check for user cancellation with a more friendly message
@@ -106,7 +194,7 @@ export default function Home() {
   };
 
   const sendWifiCredentials = async () => {
-    if (!device || !device.gatt) {
+    if (!device) {
       setError("No device connected");
       return;
     }
@@ -120,20 +208,23 @@ export default function Home() {
       setIsConnecting(true);
       setError(null);
       
-      // Set timeout for connection attempts
-      const connectPromise = device.gatt.connect();
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Connection timeout')), connectionTimeout)
-      );
+      // Check if we need to reconnect
+      let server = gattServer;
+      if (!server || !server.connected) {
+        addDebug('GATT Server not connected, attempting to connect...');
+        const newServer = await device.gatt?.connect();
+        if (!newServer) {
+          throw new Error('Failed to connect to GATT server');
+        }
+        server = newServer;
+        setGattServer(newServer);
+      }
       
-      // Connect to the GATT server with timeout
-      const server = await Promise.race([connectPromise, timeoutPromise]) as BluetoothRemoteGATTServer;
+      addDebug(`Getting UART service: ${UART_SERVICE_UUID}`);
+      const service = await server.getPrimaryService(UART_SERVICE_UUID);
       
-      // Get the primary service (using a standard UUID for demonstration)
-      const service = await server.getPrimaryService('battery_service');
-      
-      // Get the characteristic for WiFi config
-      const characteristic = await service.getCharacteristic(wifiConfigCharacteristicUuid);
+      addDebug(`Getting RX characteristic: ${UART_RX_CHARACTERISTIC_UUID}`);
+      const rxCharacteristic = await service.getCharacteristic(UART_RX_CHARACTERISTIC_UUID);
       
       // Create the WiFi credentials data
       const wifiData = JSON.stringify({
@@ -145,10 +236,46 @@ export default function Home() {
       const encoder = new TextEncoder();
       const wifiDataBytes = encoder.encode(wifiData);
       
+      addDebug(`Sending data: ${wifiData}`);
       // Send the data
-      await characteristic.writeValue(wifiDataBytes);
+      await rxCharacteristic.writeValue(wifiDataBytes);
       
       setSuccessMessage("WiFi credentials sent successfully!");
+      
+      // Optional: Set up listener for response from device
+      try {
+        addDebug(`Getting TX characteristic: ${UART_TX_CHARACTERISTIC_UUID}`);
+        const txCharacteristic = await service.getCharacteristic(UART_TX_CHARACTERISTIC_UUID);
+        
+        if (txCharacteristic.properties.notify) {
+          addDebug('Setting up notification listener on TX characteristic...');
+          await txCharacteristic.startNotifications();
+          txCharacteristic.addEventListener('characteristicvaluechanged', (event: Event) => {
+            // Type-cast event.target with a safer approach
+            const target = event.target as unknown;
+            // Now it's safe to cast to our expected type
+            const characteristic = target as BluetoothRemoteGATTCharacteristic & { value: DataView };
+            const value = characteristic.value;
+            const decoder = new TextDecoder('utf-8');
+            const response = decoder.decode(value);
+            addDebug(`Received response: ${response}`);
+            try {
+              const responseData = JSON.parse(response);
+              if (responseData.status === 'success') {
+                setSuccessMessage(responseData.message || 'WiFi credentials received by device!');
+              }
+            } catch (e) {
+              addDebug(`Response was not JSON: ${response}`);
+            }
+          });
+        } else {
+          addDebug('TX characteristic does not support notifications');
+        }
+      } catch (e) {
+        addDebug(`Could not set up notifications: ${e instanceof Error ? e.message : String(e)}`);
+        // This is optional, so we just log and continue
+      }
+      
     } catch (err) {
       console.error('Error sending WiFi credentials:', err);
       setError(`Failed to send WiFi credentials: ${err instanceof Error ? err.message : String(err)}`);
@@ -182,6 +309,18 @@ export default function Home() {
         {successMessage && (
           <div className="mb-6 p-4 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg text-sm">
             <p>{successMessage}</p>
+          </div>
+        )}
+
+        {/* Add debug information section */}
+        {debug.length > 0 && (
+          <div className="mt-6 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg text-xs font-mono overflow-auto max-h-60">
+            <h3 className="text-sm font-semibold mb-2">Debug Log:</h3>
+            <ul className="space-y-1">
+              {debug.map((msg, idx) => (
+                <li key={idx}>{msg}</li>
+              ))}
+            </ul>
           </div>
         )}
 
