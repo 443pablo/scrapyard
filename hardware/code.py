@@ -119,7 +119,7 @@ def route_flashlight_blink(request: Request):
 @server.route("/disable", GET)
 def route_flashlight_blink(request: Request):
     global disabled
-    turn_off()
+
     disabled = time.time() + 60
     return Response(request, json.dumps({}), content_type="application/json")
 # Start the server
@@ -130,7 +130,9 @@ was_ble_connected = False
 while True:
     server.poll()
     if disabled != None:
+        turn_off()
         if time.time() > disabled:
+            
             disabled = None
     if disabled == None:
         if mode == 'off':
