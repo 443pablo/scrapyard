@@ -31,7 +31,14 @@ export const useSpeech = (
     if (!isListening) {
       await startListening();
     } else {
+      // When stopping, send the current transcript to Gemini
       stopListening();
+      
+      // Only send if there's an actual transcript to send
+      if (transcript.trim()) {
+        addDebug(`Processing transcript on stop: ${transcript}`);
+        await onFinalTranscript(transcript);
+      }
     }
   };
 
@@ -39,6 +46,9 @@ export const useSpeech = (
   const startListening = async (): Promise<void> => {
     try {
       setIsListening(true);
+      
+      // Clear previous transcript when starting new listening session
+      setTranscript('');
       
       // Use Web Speech API directly
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -56,15 +66,15 @@ export const useSpeech = (
           // Update the transcript in real-time
           setTranscript(speechResult);
           
-          // Only process if this is a final result (not an interim)
+          // Store final results but don't send to Gemini yet
           if (event.results[current].isFinal) {
             addDebug(`Final speech recognized: ${speechResult}`);
             
             // Save the latest final transcript
             lastTranscriptRef.current = speechResult;
             
-            // Now send to handler function
-            await onFinalTranscript(speechResult);
+            // No longer sending to handler function here
+            // Instead, we'll only send the transcript when Stop Listening is pressed
           }
         };
         
