@@ -9,7 +9,9 @@ interface GeminiChatProps {
   geminiResponse: string;
   isProcessing: boolean;
   isSpeechSupported: boolean;
-  toggleMicrophone: () => Promise<void>;
+  toggleMicrophone: () => Promise<void>; // Keep for backward compatibility
+  startPushToTalk: () => Promise<void>;
+  endPushToTalk: () => Promise<void>;
 }
 
 export const GeminiChat: React.FC<GeminiChatProps> = ({
@@ -18,7 +20,10 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
   geminiResponse,
   isProcessing,
   isSpeechSupported,
-  toggleMicrophone
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  toggleMicrophone,
+  startPushToTalk,
+  endPushToTalk
 }) => {
   // Initialize speech synthesis
   const { speak, stop, isSpeaking, isSupported: isSpeechSynthesisSupported } = useSpeechSynthesis();
@@ -71,13 +76,17 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
         </div>
       )}
       
+      {/* Push-to-talk button */}
       <button
-        onClick={toggleMicrophone}
+        onMouseDown={startPushToTalk}
+        onMouseUp={endPushToTalk}
+        onTouchStart={startPushToTalk}
+        onTouchEnd={endPushToTalk}
         disabled={isProcessing || !isSpeechSupported}
         className={`w-full py-4 px-4 flex items-center justify-center text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-opacity-50 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors ${
           isListening 
-            ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500' 
-            : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
+            ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500 active:bg-red-800' 
+            : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500 active:bg-blue-800'
         }`}
       >
         {isProcessing ? (
@@ -94,14 +103,14 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
             </span>
-            Stop Listening
+            Recording...
           </span>
         ) : (
           <span className="flex items-center">
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
             </svg>
-            Start Listening
+            Push to Talk
           </span>
         )}
       </button>

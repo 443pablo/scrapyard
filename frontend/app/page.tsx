@@ -272,6 +272,8 @@ export default function Home() {
               isProcessing={gemini.isProcessing}
               isSpeechSupported={speech.isSpeechSupported}
               toggleMicrophone={speech.toggleMicrophone}
+              startPushToTalk={speech.startPushToTalk}
+              endPushToTalk={speech.endPushToTalk}
             />
           </div>
         )}

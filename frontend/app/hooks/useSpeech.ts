@@ -26,24 +26,8 @@ export const useSpeech = (
     setIsSpeechSupported('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
   }, []);
 
-  // Function to toggle microphone recording
-  const toggleMicrophone = async (): Promise<void> => {
-    if (!isListening) {
-      await startListening();
-    } else {
-      // When stopping, send the current transcript to Gemini
-      stopListening();
-      
-      // Only send if there's an actual transcript to send
-      if (transcript.trim()) {
-        addDebug(`Processing transcript on stop: ${transcript}`);
-        await onFinalTranscript(transcript);
-      }
-    }
-  };
-
-  // Function to start listening with microphone
-  const startListening = async (): Promise<void> => {
+  // Function for push-to-talk start (when button is pressed)
+  const startPushToTalk = async (): Promise<void> => {
     try {
       setIsListening(true);
       
@@ -66,15 +50,12 @@ export const useSpeech = (
           // Update the transcript in real-time
           setTranscript(speechResult);
           
-          // Store final results but don't send to Gemini yet
+          // Store final results
           if (event.results[current].isFinal) {
             addDebug(`Final speech recognized: ${speechResult}`);
             
             // Save the latest final transcript
             lastTranscriptRef.current = speechResult;
-            
-            // No longer sending to handler function here
-            // Instead, we'll only send the transcript when Stop Listening is pressed
           }
         };
         
@@ -98,27 +79,12 @@ export const useSpeech = (
           setIsListening(false);
         };
         
-        // When recognition ends for any reason other than us stopping it manually,
-        // restart it if we're still in listening mode
-        recognition.onend = () => {
-          // If we're still supposed to be listening, restart recognition
-          if (isListening) {
-            try {
-              recognition.start();
-              addDebug('Restarted speech recognition');
-            } catch (error) {
-              console.error('Error restarting recognition:', error);
-              setIsListening(false);
-            }
-          }
-        };
-        
         // Store recognition instance in ref to access in stopListening
         recognitionRef.current = recognition;
         
         // Start recognition
         recognition.start();
-        addDebug(`Started continuous speech recognition`);
+        addDebug(`Started push-to-talk speech recognition`);
       } else {
         // Fallback for browsers that don't support SpeechRecognition
         addDebug('Speech recognition is not supported in this browser');
@@ -131,8 +97,8 @@ export const useSpeech = (
     }
   };
 
-  // Function to stop listening
-  const stopListening = (): void => {
+  // Function for push-to-talk end (when button is released)
+  const endPushToTalk = async (): Promise<void> => {
     setIsListening(false);
     
     // Access and stop the recognition instance if it exists
@@ -147,6 +113,43 @@ export const useSpeech = (
       // Clean up the reference
       recognitionRef.current = null;
     }
+    
+    // Process the transcript when button is released
+    if (transcript.trim()) {
+      addDebug(`Processing transcript on button release: ${transcript}`);
+      await onFinalTranscript(transcript);
+    }
+  };
+
+  // Legacy functions for backward compatibility
+  const toggleMicrophone = async (): Promise<void> => {
+    if (!isListening) {
+      await startListening();
+    } else {
+      stopListening();
+      
+      // Only send if there's an actual transcript to send
+      if (transcript.trim()) {
+        addDebug(`Processing transcript on stop: ${transcript}`);
+        await onFinalTranscript(transcript);
+      }
+    }
+  };
+
+  const startListening = startPushToTalk;
+  const stopListening = (): void => {
+    setIsListening(false);
+    
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+        addDebug('Stopped speech recognition');
+      } catch (e) {
+        console.error('Error stopping recognition:', e);
+      }
+      
+      recognitionRef.current = null;
+    }
   };
 
   return {
@@ -158,6 +161,8 @@ export const useSpeech = (
     // Methods
     toggleMicrophone,
     startListening,
-    stopListening
+    stopListening,
+    startPushToTalk,
+    endPushToTalk
   };
 }; 
