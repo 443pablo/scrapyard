@@ -77,7 +77,7 @@ export default function Home() {
         !http.isConnecting) {
       
       // Use a default IP or get it from environment
-      const deviceIp = process.env.NEXT_PUBLIC_DEVICE_IP || '192.168.137.179';
+      const deviceIp = process.env.NEXT_PUBLIC_DEVICE_IP || '192.168.137.224';
       // Format with port if needed
       const httpAddress = HTTP_PORT ? `${deviceIp}:${HTTP_PORT}` : deviceIp;
       
