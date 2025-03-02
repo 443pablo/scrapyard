@@ -10,7 +10,6 @@ interface GeminiChatProps {
   isProcessing: boolean;
   isSpeechSupported: boolean;
   toggleMicrophone: () => Promise<void>;
-  isResponseVisible?: boolean;
 }
 
 export const GeminiChat: React.FC<GeminiChatProps> = ({
@@ -19,8 +18,7 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
   geminiResponse,
   isProcessing,
   isSpeechSupported,
-  toggleMicrophone,
-  isResponseVisible = true
+  toggleMicrophone
 }) => {
   // Initialize speech synthesis
   const { speak, stop, isSpeaking, isSupported: isSpeechSynthesisSupported } = useSpeechSynthesis();
@@ -62,17 +60,14 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
         </p>
       </div>
       
-      {geminiResponse && (
+      {/* Only show processing indicator when AI is processing, but hide actual response */}
+      {geminiResponse && isProcessing && (
         <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
           <div className="flex justify-between items-center mb-1">
             <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-300">
-              {isProcessing ? "Flashlight is thinking..." : "Flashlight says:"}
+              Flashlight is thinking...
             </h3>
           </div>
-          {/* Show response based on visibility setting */}
-          {isResponseVisible && (
-            <p className="text-sm text-gray-800 dark:text-gray-200">{geminiResponse}</p>
-          )}
         </div>
       )}
       

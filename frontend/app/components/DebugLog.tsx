@@ -31,9 +31,11 @@ export const DebugLog: React.FC<DebugLogProps> = ({
       <footer className="mt-8 text-center text-sm text-gray-500 dark:text-gray-400 pt-4 pb-8">
         <p>Built for Scrapyard Flagship</p>
         <div className="mt-1 space-y-1">
-          <p className="cursor-pointer hover:underline" onClick={toggleDebugVisibility}>
-            {isDebugVisible ? 'Hide' : 'Show'} Debug Log (Ctrl+K)
-          </p>
+          <div 
+            className="cursor-pointer h-6" 
+            onClick={toggleDebugVisibility} 
+            aria-hidden="true"
+          ></div>
         </div>
       </footer>
     </>
