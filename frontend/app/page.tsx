@@ -1,101 +1,288 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useEffect, useCallback, useRef } from "react";
+import { 
+  ConnectionStatus, 
+  GeminiChat, 
+  DebugLog,
+  HttpFlashlightControl
+} from "./components";
+import { 
+  useBluetooth, 
+  useSpeech, 
+  useGemini, 
+  useDebug,
+  useHttp
+} from "./hooks";
+import { 
+  DEFAULT_DEVICE_NAME_PREFIX, 
+  DEFAULT_SYSTEM_PROMPT,
+  HTTP_PORT 
+} from "./constants";
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  // Get environment variables
+  const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Device Setup';
+  const deviceNamePrefix = process.env.NEXT_PUBLIC_DEVICE_NAME_PREFIX || DEFAULT_DEVICE_NAME_PREFIX;
+  const geminiApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+  const geminiModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || 'gemini-1.5-pro';
+  const systemPrompt = process.env.NEXT_PUBLIC_GEMINI_SYSTEM_PROMPT || DEFAULT_SYSTEM_PROMPT;
+  
+  // Initialize debug hook
+  const { debug, isDebugVisible, addDebug, toggleDebugVisibility } = useDebug();
+  
+  // Initialize Bluetooth hook
+  const bluetooth = useBluetooth(deviceNamePrefix);
+  
+  // Initialize HTTP hook
+  const http = useHttp();
+  
+  // Initialize Gemini hook
+  const gemini = useGemini({
+    apiKey: geminiApiKey,
+    model: geminiModel,
+    systemPrompt: systemPrompt
+  });
+  
+  // Initialize Speech hook with callback to send to Gemini
+  const speech = useSpeech(gemini.sendToGemini);
+  
+  // State for controlling AI interface visibility regardless of connection status
+  const [isAiInterfaceVisible, setIsAiInterfaceVisible] = useState(false);
+  
+  // State for HTTP connection retries
+  const [httpRetryCount, setHttpRetryCount] = useState(0);
+  const MAX_RETRY_COUNT = 3;
+  const RETRY_DELAY_MS = 3000;
+  
+  // Track processed responses to prevent duplicates
+  const processedResponseRef = useRef<string | null>(null);
+  
+  // Helper to determine if we're connected using either method
+  const isConnectedAny = bluetooth.isConnected || http.isConnected;
+  
+  // Function to attempt HTTP connection
+  const attemptHttpConnection = useCallback(() => {
+    if (bluetooth.isConnected && 
+        !http.isConnected && 
+        !http.isConnecting) {
+      
+      // Use a default IP or get it from environment
+      const deviceIp = process.env.NEXT_PUBLIC_DEVICE_IP || '10.10.16.80';
+      // Format with port if needed
+      const httpAddress = HTTP_PORT !== 80 ? `${deviceIp}:${HTTP_PORT}` : deviceIp;
+      
+      addDebug(`Connecting to HTTP at ${httpAddress} (Attempt ${httpRetryCount + 1}/${MAX_RETRY_COUNT})`);
+      http.connectToDevice(httpAddress);
+    }
+  }, [bluetooth.isConnected, http.isConnected, http.isConnecting, httpRetryCount, addDebug, http, HTTP_PORT]);
+  
+  // Auto-connect to HTTP when Bluetooth is connected
+  useEffect(() => {
+    if (bluetooth.isConnected && 
+        !http.isConnected && 
+        !http.isConnecting) {
+      
+      attemptHttpConnection();
+    }
+  }, [bluetooth.isConnected, http.isConnected, http.isConnecting, attemptHttpConnection]);
+  
+  // Retry HTTP connection if it fails
+  useEffect(() => {
+    // If there was an error and we haven't exceeded max retries
+    if (http.error && httpRetryCount < MAX_RETRY_COUNT && !http.isConnected && !http.isConnecting) {
+      const timer = setTimeout(() => {
+        setHttpRetryCount(prev => prev + 1);
+        addDebug(`Retrying HTTP connection (${httpRetryCount + 1}/${MAX_RETRY_COUNT})`);
+        attemptHttpConnection();
+      }, RETRY_DELAY_MS);
+      
+      return () => clearTimeout(timer);
+    }
+    
+    // Reset retry count when successfully connected
+    if (http.isConnected && httpRetryCount !== 0) {
+      setHttpRetryCount(0);
+    }
+  }, [http.error, http.isConnected, http.isConnecting, httpRetryCount, MAX_RETRY_COUNT, addDebug, attemptHttpConnection]);
+  
+  // Hook to handle Gemini responses for controlling the flashlight
+  useEffect(() => {
+    if (!gemini.geminiResponse) return;
+    
+    // Check if we've already processed this exact response
+    if (processedResponseRef.current === gemini.geminiResponse) {
+      return;
+    }
+    
+    // Mark this response as processed
+    processedResponseRef.current = gemini.geminiResponse;
+    
+    try {
+      // Check if there's a JSON command in the response
+      const commandMatch = gemini.geminiResponse.match(/\{.*"command".*\}/);
+      const blinkMatch = gemini.geminiResponse.match(/\{.*"blink".*\}/);
+      
+      if (commandMatch) {
+        const commandData = JSON.parse(commandMatch[0]);
+        
+        if (commandData.command === "on") {
+          addDebug("AI requested to turn flashlight ON");
+          
+          // Use HTTP for flashlight control if connected
+          if (http.isConnected) {
+            http.turnOnFlashlight();
+          } else {
+            addDebug("Cannot turn on flashlight: HTTP not connected");
+          }
+        } 
+        else if (commandData.command === "off") {
+          addDebug("AI requested to turn flashlight OFF");
+          
+          // Use HTTP for flashlight control if connected
+          if (http.isConnected) {
+            http.turnOffFlashlight();
+          } else {
+            addDebug("Cannot turn off flashlight: HTTP not connected");
+          }
+        }
+      }
+      
+      if (blinkMatch) {
+        const blinkData = JSON.parse(blinkMatch[0]);
+        const blinkInterval = parseInt(blinkData.blink);
+        
+        if (!isNaN(blinkInterval)) {
+          addDebug(`AI requested to blink flashlight every ${blinkInterval}ms`);
+          
+          if (http.isConnected) {
+            http.blinkFlashlight(blinkInterval);
+          } else {
+            addDebug("Cannot blink flashlight: HTTP not connected");
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Error parsing AI command:", e);
+    }
+  }, [gemini.geminiResponse, http, addDebug]);
+  
+  // Add keyboard event listeners for debug toggle (Ctrl+K) and AI interface toggle (Ctrl+Y)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Check for Ctrl+K to toggle debug
+      if (event.ctrlKey && event.key === 'k') {
+        event.preventDefault(); // Prevent default browser behavior
+        toggleDebugVisibility(); // Toggle debug visibility
+      }
+      
+      // Check for Ctrl+Y to toggle AI interface visibility
+      if (event.ctrlKey && event.key === 'y') {
+        event.preventDefault(); // Prevent default browser behavior
+        setIsAiInterfaceVisible((prev: boolean) => !prev); // Toggle AI interface visibility
+        addDebug(`Toggled AI interface visibility: ${!isAiInterfaceVisible ? 'ON' : 'OFF'}`);
+      }
+    };
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    // Add event listener
+    window.addEventListener('keydown', handleKeyDown);
+
+    // Cleanup event listener when component unmounts
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isAiInterfaceVisible, addDebug, toggleDebugVisibility]);
+
+  return (
+    <div className="min-h-screen p-8 flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <main className="w-full max-w-md p-6 bg-white dark:bg-gray-800 rounded-xl shadow-md">
+        <div className="flex flex-col items-center mb-8">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{appName}</h1>
+          <p className="text-sm text-gray-600 dark:text-gray-300 text-center">
+            Connect to your next-generation flashlight and interact with it using your voice.
+          </p>
         </div>
+
+        {/* Bluetooth Connection */}
+        <ConnectionStatus 
+          isConnected={bluetooth.isConnected}
+          isConnecting={bluetooth.isConnecting}
+          deviceName={bluetooth.device?.name}
+          error={bluetooth.error}
+          successMessage={bluetooth.successMessage}
+          isBluetoothSupported={bluetooth.isBluetoothSupported}
+          isSpeechSupported={speech.isSpeechSupported}
+          connectToDevice={bluetooth.connectToDevice}
+        />
+        
+        {/* HTTP Connection Status - Minimal */}
+        {bluetooth.isConnected && (
+          <div className="mt-4 mb-6 flex items-center">
+            <div className={`w-3 h-3 rounded-full mr-2 ${
+              http.isConnected 
+                ? 'bg-green-500' 
+                : http.isConnecting 
+                  ? 'bg-yellow-500' 
+                  : 'bg-red-500'
+            }`}></div>
+            <span className="text-sm">
+              {http.isConnected 
+                ? 'HTTP Connected' 
+                : http.isConnecting 
+                  ? 'Connecting...' 
+                  : 'Connection failed'}
+            </span>
+            {httpRetryCount > 0 && !http.isConnected && (
+              <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">
+                (Retry {httpRetryCount}/{MAX_RETRY_COUNT})
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Show HTTP flashlight controls when HTTP is connected */}
+        {http.isConnected && (
+          <HttpFlashlightControl 
+            flashlightStatus={http.flashlightStatus}
+            toggleFlashlight={http.toggleFlashlight}
+            turnOnFlashlight={http.turnOnFlashlight}
+            turnOffFlashlight={http.turnOffFlashlight}
+            blinkFlashlight={http.blinkFlashlight}
+          />
+        )}
+        
+        {/* Gemini Chat Interface - Show when connected OR when explicitly toggled */}
+        {(isConnectedAny || isAiInterfaceVisible) && (
+          <div className="mb-4">
+            {!isConnectedAny && (
+              <div className="mb-3 p-2 bg-yellow-100 dark:bg-yellow-900/20 rounded text-sm text-yellow-700 dark:text-yellow-300">
+                <p className="flex items-center">
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  AI interface active without device connection. Device control commands will not work.
+                </p>
+              </div>
+            )}
+            
+            <GeminiChat 
+              isListening={speech.isListening}
+              transcript={speech.transcript}
+              geminiResponse={gemini.geminiResponse}
+              isProcessing={gemini.isProcessing}
+              isSpeechSupported={speech.isSpeechSupported}
+              toggleMicrophone={speech.toggleMicrophone}
+            />
+          </div>
+        )}
       </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      
+      {/* Debug Log with always-visible footer */}
+      <DebugLog 
+        debug={debug} 
+        isDebugVisible={isDebugVisible}
+        toggleDebugVisibility={toggleDebugVisibility}
+      />
     </div>
   );
-}
+} 
