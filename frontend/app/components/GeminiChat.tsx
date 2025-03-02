@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis';
 
 interface GeminiChatProps {
@@ -27,18 +27,29 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
   // Initialize speech synthesis
   const { speak, stop, isSpeaking, isSupported: isSpeechSynthesisSupported } = useSpeechSynthesis();
   
+  // Track the response we've already tried to speak
+  const spokenResponseRef = useRef<string | null>(null);
+  
   // Automatically speak Gemini responses when they arrive (if secret auto-speak is enabled)
   useEffect(() => {
-    if (geminiResponse && !isProcessing && isSpeechSynthesisSupported) {
-      // Only use secret auto-speak now
-      if (secretAutoSpeakEnabled) {
+    if (geminiResponse && !isProcessing && isSpeechSynthesisSupported && secretAutoSpeakEnabled) {
+      // Only attempt to speak if this is a new response or we haven't tried to speak it yet
+      if (spokenResponseRef.current !== geminiResponse) {
+        console.log("Auto-speak is enabled, attempting to speak");
+        spokenResponseRef.current = geminiResponse;
         speak(geminiResponse);
+      } else {
+        console.log("Already attempted to speak this response, not trying again");
       }
+    } else if (geminiResponse && !secretAutoSpeakEnabled) {
+      console.log("Auto-speak is disabled, not speaking response");
     }
     
     // Stop speaking when processing new requests
     if (isProcessing && isSpeaking) {
       stop();
+      // Reset the spoken response ref when processing starts
+      spokenResponseRef.current = null;
     }
   }, [geminiResponse, isProcessing, isSpeechSynthesisSupported, speak, stop, isSpeaking, secretAutoSpeakEnabled]);
 
@@ -63,7 +74,21 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
             <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-300">
               {isProcessing ? "Flashlight is thinking..." : "Flashlight says:"}
             </h3>
-            {/* Auto-speak toggle and speak buttons removed */}
+            {/* Auto-speak toggle button */}
+            <button 
+              onClick={() => {
+                // We don't have direct access to setSecretAutoSpeakEnabled,
+                // so let's simulate the keyboard shortcut
+                const event = new KeyboardEvent('keydown', {
+                  key: 'o',
+                  ctrlKey: true,
+                });
+                window.dispatchEvent(event);
+              }}
+              className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-700 dark:text-gray-300"
+            >
+              Auto-speak: {secretAutoSpeakEnabled ? 'ON' : 'OFF'}
+            </button>
           </div>
           {/* Show response based on visibility setting */}
           {isResponseVisible && (
