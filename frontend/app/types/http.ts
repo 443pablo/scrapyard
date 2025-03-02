@@ -1,4 +1,4 @@
-export interface WebSocketState {
+export interface HttpState {
   isConnected: boolean;
   isConnecting: boolean;
   error: string | null;
@@ -9,18 +9,17 @@ export interface WebSocketState {
   ipAddress: string | null;
 }
 
-export interface WebSocketServices {
-  connectToWebSocket: (ipAddress: string) => Promise<void>;
-  disconnectWebSocket: () => void;
+export interface HttpServices {
+  connectToDevice: (ipAddress: string) => Promise<void>;
+  disconnectDevice: () => void;
   toggleFlashlight: () => Promise<void>;
   turnOnFlashlight: () => Promise<void>;
   turnOffFlashlight: () => Promise<void>;
   blinkFlashlight: (intervalMs: number) => Promise<void>;
   getFlashlightStatus: () => Promise<void>;
-  sendMessage: (message: string | Record<string, unknown>) => Promise<boolean>;
 }
 
-export interface WebSocketResponse {
+export interface HttpResponse {
   status: 'success' | 'error';
   message: string;
   flashlight?: boolean;

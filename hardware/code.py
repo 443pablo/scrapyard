@@ -1,4 +1,4 @@
-print("Starting WiFi, Bluetooth, and WebSocket Server")
+print("Starting WiFi, Bluetooth, and HTTP Server")
 import time
 import os
 import wifi
@@ -10,8 +10,8 @@ from adafruit_ble import BLERadio
 from adafruit_ble.advertising.standard import ProvideServicesAdvertisement
 from adafruit_ble.services.nordic import UARTService
 
-# Import WebSocket support
-from adafruit_httpserver import Server, Request, Response, Websocket, GET
+# Import HTTP server support
+from adafruit_httpserver import Server, Request, Response, GET
 
 # Set up virtual flashlight (console logging only for now)
 flashlight_state = False  # Track the flashlight state
@@ -33,9 +33,6 @@ ble.start_advertising(advertisement, interval=0.2)
 
 print(f"Bluetooth server started with name: {ble.name}")
 
-# Global websocket variable
-websocket = None
-
 # Function to toggle the flashlight
 def toggle_flashlight():
     global flashlight_state
@@ -54,6 +51,44 @@ def toggle_flashlight():
         "message": f"Flashlight turned {'ON' if flashlight_state else 'OFF'}",
         "flashlight": flashlight_state
     }
+
+# Function to turn the flashlight on
+def flashlight_on():
+    global flashlight_state
+    
+    if not flashlight_state:
+        flashlight_state = True
+        print("FLASHLIGHT: ON")
+        return {
+            "status": "success", 
+            "message": "Flashlight turned ON",
+            "flashlight": True
+        }
+    else:
+        return {
+            "status": "success", 
+            "message": "Flashlight is already ON",
+            "flashlight": True
+        }
+
+# Function to turn the flashlight off
+def flashlight_off():
+    global flashlight_state
+    
+    if flashlight_state:
+        flashlight_state = False
+        print("FLASHLIGHT: OFF")
+        return {
+            "status": "success", 
+            "message": "Flashlight turned OFF",
+            "flashlight": False
+        }
+    else:
+        return {
+            "status": "success", 
+            "message": "Flashlight is already OFF",
+            "flashlight": False
+        }
 
 # Function to blink the flashlight (simulated with console logs for now)
 def blink_flashlight(interval_ms=1000):
@@ -94,7 +129,7 @@ def safe_uart_read():
 # Connect to WiFi using settings.toml credentials
 print("Connecting to WiFi...")
 
-# WebSocket server and HTTP server variables
+# HTTP server variables
 server = None
 pool = None
 
@@ -111,33 +146,56 @@ try:
     # Create a socket pool for network connections
     pool = socketpool.SocketPool(wifi.radio)
     
-    # Initialize the HTTP server with WebSocket support
+    # Initialize the HTTP server
     server = Server(pool, debug=True)
     
-    # Define a WebSocket connection route
-    @server.route("/ws", GET)
-    def connect_websocket(request: Request):
-        global websocket
+    # Define HTTP routes for flashlight control
+    @server.route("/hello", GET)
+    def hello_world(request: Request):
+        return Response(request, "Hello World!")
+    
+    @server.route("/flashlight/on", GET)
+    def route_flashlight_on(request: Request):
+        result = flashlight_on()
+        return Response(request, json.dumps(result), content_type="application/json")
+    
+    @server.route("/flashlight/off", GET)
+    def route_flashlight_off(request: Request):
+        result = flashlight_off()
+        return Response(request, json.dumps(result), content_type="application/json")
+    
+    @server.route("/flashlight/toggle", GET)
+    def route_flashlight_toggle(request: Request):
+        result = toggle_flashlight()
+        return Response(request, json.dumps(result), content_type="application/json")
+    
+    @server.route("/flashlight/blink", GET)
+    def route_flashlight_blink(request: Request):
+        # Get interval parameter from query string if provided
+        params = request.query_params
+        interval_ms = 1000  # Default to 1000ms
         
-        if websocket is not None:
-            websocket.close()  # Close any existing connection
-            
-        websocket = Websocket(request)
-        print("WebSocket client connected")
+        if "interval" in params:
+            try:
+                interval_ms = int(params["interval"])
+            except ValueError:
+                pass  # Stick with default on error
         
-        # Send initial state
-        status_msg = json.dumps({
+        result = blink_flashlight(interval_ms)
+        return Response(request, json.dumps(result), content_type="application/json")
+    
+    @server.route("/flashlight/status", GET)
+    def route_flashlight_status(request: Request):
+        status = {
             "status": "success",
             "message": f"Flashlight is {'ON' if flashlight_state else 'OFF'}",
             "flashlight": flashlight_state
-        })
-        websocket.send_message(status_msg)
-        
-        return websocket
+        }
+        return Response(request, json.dumps(status), content_type="application/json")
     
     # Start the server
     server.start(str(wifi.radio.ipv4_address))
-    print(f"WebSocket server started on ws://{wifi.radio.ipv4_address}/ws")
+    print(f"HTTP server started on http://{wifi.radio.ipv4_address}/")
         
     # Send WiFi status via BLE if a client is connected
     if ble.connected:
@@ -158,79 +216,19 @@ except Exception as e:
         })
         uart.write(bytes(status_msg, "utf-8"))
 
-print("Waiting for Bluetooth and WebSocket connections...")
+print("Waiting for Bluetooth connections and HTTP requests...")
 
 # Track connection state to avoid repeating messages
 was_ble_connected = False
 
 # Main loop
 async def main():
-    global was_ble_connected, websocket
+    global was_ble_connected
     
     while True:
-        # Handle HTTP server requests (which includes WebSocket connections)
+        # Handle HTTP server requests
         if server:
             server.poll()
-        
-        # Handle WebSocket messages if connected
-        if websocket is not None:
-            try:
-                data = websocket.receive(fail_silently=True)
-                if data:
-                    print(f"WebSocket received: {data}")
-                    try:
-                        command_data = json.loads(data)
-                        # Handle the commands
-                        if 'command' in command_data:
-                            if command_data['command'] == 'on':
-                                # Turn flashlight on if it's not already on
-                                if not flashlight_state:
-                                    result = toggle_flashlight()
-                                    websocket.send_message(json.dumps(result), fail_silently=True)
-                                else:
-                                    websocket.send_message(json.dumps({
-                                        "status": "success",
-                                        "message": "Flashlight is already ON",
-                                        "flashlight": flashlight_state
-                                    }), fail_silently=True)
-                            elif command_data['command'] == 'off':
-                                # Turn flashlight off if it's not already off
-                                if flashlight_state:
-                                    result = toggle_flashlight()
-                                    websocket.send_message(json.dumps(result), fail_silently=True)
-                                else:
-                                    websocket.send_message(json.dumps({
-                                        "status": "success",
-                                        "message": "Flashlight is already OFF",
-                                        "flashlight": flashlight_state
-                                    }), fail_silently=True)
-                            elif command_data['command'] == 'toggle_flashlight':
-                                # Toggle the flashlight
-                                result = toggle_flashlight()
-                                websocket.send_message(json.dumps(result), fail_silently=True)
-                            elif command_data['command'] == 'flashlight_status':
-                                # Send current flashlight status
-                                status_msg = {
-                                    "status": "success",
-                                    "message": f"Flashlight is {'ON' if flashlight_state else 'OFF'}",
-                                    "flashlight": flashlight_state
-                                }
-                                websocket.send_message(json.dumps(status_msg), fail_silently=True)
-                        # Handle blink command
-                        elif 'blink' in command_data:
-                            interval = int(command_data['blink'])
-                            result = blink_flashlight(interval)
-                            websocket.send_message(json.dumps(result), fail_silently=True)
-                    except Exception as e:
-                        print(f"Error processing WebSocket data: {e}")
-                        error_msg = {
-                            "status": "error",
-                            "message": f"Error processing command: {str(e)}"
-                        }
-                        websocket.send_message(json.dumps(error_msg), fail_silently=True)
-            except Exception as e:
-                print(f"WebSocket error: {e}")
-                websocket = None  # Clear the connection if there's an error
         
         # Handle Bluetooth connections for pairing
         if ble.connected:

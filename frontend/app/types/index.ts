@@ -3,5 +3,5 @@ export * from './debug';
 export * from './bluetooth';
 export * from './speech';
 export * from './gemini';
-export * from './websocket';
+export * from './http';
 export * from './speechSynthesis'; 

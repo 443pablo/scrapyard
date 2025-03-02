@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-interface WebSocketFlashlightControlProps {
+interface HttpFlashlightControlProps {
   flashlightStatus: {
     on: boolean;
     available: boolean;
@@ -11,7 +11,7 @@ interface WebSocketFlashlightControlProps {
   blinkFlashlight: (intervalMs: number) => Promise<void>;
 }
 
-export const WebSocketFlashlightControl: React.FC<WebSocketFlashlightControlProps> = ({
+export const HttpFlashlightControl: React.FC<HttpFlashlightControlProps> = ({
   flashlightStatus,
   toggleFlashlight,
   turnOnFlashlight,
@@ -25,7 +25,9 @@ export const WebSocketFlashlightControl: React.FC<WebSocketFlashlightControlProp
     const interval = parseInt(blinkInterval);
     if (!isNaN(interval) && interval > 0) {
       setIsBlinking(true);
-      blinkFlashlight(interval);
+      blinkFlashlight(interval).then(() => {
+        setTimeout(() => setIsBlinking(false), 2000);
+      });
     }
   };
   
@@ -106,9 +108,10 @@ export const WebSocketFlashlightControl: React.FC<WebSocketFlashlightControlProp
             
             <button
               onClick={handleBlinkStart}
+              disabled={isBlinking}
               className={`px-3 rounded-lg transition-colors ${
                 isBlinking
-                  ? 'bg-purple-500 hover:bg-purple-600'
+                  ? 'bg-purple-400 cursor-not-allowed'
                   : 'bg-purple-600 hover:bg-purple-700'
               } text-white`}
             >
