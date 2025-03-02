@@ -4,4 +4,5 @@ export * from './useBluetooth';
 export * from './useSpeech';
 export * from './useGemini';
 export * from './useHttp';
-export * from './useSpeechSynthesis'; 
+export * from './useSpeechSynthesis';
+export * from './useGeminiCommandDetector'; 

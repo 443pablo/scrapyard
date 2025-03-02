@@ -5,14 +5,16 @@ import {
   ConnectionStatus, 
   GeminiChat, 
   DebugLog,
-  HttpFlashlightControl
+  HttpFlashlightControl,
+  GeminiResponseDisplay
 } from "./components";
 import { 
   useBluetooth, 
   useSpeech, 
   useGemini, 
   useDebug,
-  useHttp
+  useHttp,
+  useGeminiCommandDetector
 } from "./hooks";
 import { 
   DEFAULT_DEVICE_NAME_PREFIX, 
@@ -47,6 +49,18 @@ export default function Home() {
   // Initialize Speech hook with callback to send to Gemini
   const speech = useSpeech(gemini.sendToGemini);
   
+  // Add command detector hook to process Gemini responses for commands
+  useGeminiCommandDetector(
+    gemini.geminiResponse,
+    {
+      turnOnFlashlight: http.turnOnFlashlight,
+      turnOffFlashlight: http.turnOffFlashlight,
+      blinkFlashlight: http.blinkFlashlight,
+      connectToDevice: http.connectToDevice
+    },
+    http.isConnected
+  );
+  
   // State for controlling AI interface visibility regardless of connection status
   const [isAiInterfaceVisible, setIsAiInterfaceVisible] = useState(false);
   
@@ -57,9 +71,6 @@ export default function Home() {
   
   // Track processed responses to prevent duplicates
   const processedResponseRef = useRef<string | null>(null);
-  
-  // Helper to determine if we're connected using either method
-  const isConnectedAny = bluetooth.isConnected || http.isConnected;
   
   // Function to attempt HTTP connection
   const attemptHttpConnection = useCallback(() => {
@@ -251,21 +262,15 @@ export default function Home() {
           />
         )}
         
-        {/* Gemini Chat Interface - Show when connected OR when explicitly toggled */}
-        {(isConnectedAny || isAiInterfaceVisible) && (
-          <div className="mb-4">
-            {!isConnectedAny && (
-              <div className="mb-3 p-2 bg-yellow-100 dark:bg-yellow-900/20 rounded text-sm text-yellow-700 dark:text-yellow-300">
-                <p className="flex items-center">
-                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  AI interface active without device connection. Device control commands will not work.
-                </p>
-              </div>
+        {/* Gemini Chat Interface */}
+        {(isAiInterfaceVisible || http.isConnected) && (
+          <div className="mb-6">
+            {/* Gemini Response Display */}
+            {gemini.geminiResponse && !gemini.isProcessing && (
+              <GeminiResponseDisplay geminiResponse={gemini.geminiResponse} />
             )}
             
-            <GeminiChat 
+            <GeminiChat
               isListening={speech.isListening}
               transcript={speech.transcript}
               geminiResponse={gemini.geminiResponse}

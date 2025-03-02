@@ -9,8 +9,8 @@ export const UART_TX_CHARACTERISTIC_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e
 export const DEFAULT_DEVICE_NAME_PREFIX = 'ESP32'; 
 
 // HTTP Constants
-export const HTTP_IP_ADDRESS = '10.10.16.80'; // Hardcoded IP address of the ESP32
-export const HTTP_PORT = 80; // Default HTTP port
+export const HTTP_IP_ADDRESS = '192.168.137.138'; // Hardcoded IP address of the ESP32
+export const HTTP_PORT = 5000; // Default HTTP port
 export const HTTP_RECONNECT_INTERVAL = 3000; // 3 seconds between reconnection attempts
 export const HTTP_MAX_RECONNECT_ATTEMPTS = 5; // Maximum number of reconnection attempts
 
