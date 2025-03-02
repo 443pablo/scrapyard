@@ -41,7 +41,10 @@ export default function Home() {
   // State for toggling auto-clear transcript
   const [autoClearTranscript, setAutoClearTranscript] = useState(false);
   
-  // Add keyboard event listeners for debug toggle (Ctrl+K) and autoclear toggle (Ctrl+L)
+  // State for controlling AI interface visibility regardless of connection status
+  const [isAiInterfaceVisible, setIsAiInterfaceVisible] = useState(false);
+  
+  // Add keyboard event listeners for debug toggle (Ctrl+K), autoclear toggle (Ctrl+L), and AI interface toggle (Ctrl+Y)
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // Check for Ctrl+K to toggle debug
@@ -56,6 +59,13 @@ export default function Home() {
         setAutoClearTranscript(prev => !prev); // Toggle autoclear setting
         addDebug(`Toggled auto-clear transcript: ${!autoClearTranscript ? 'ON' : 'OFF'}`);
       }
+      
+      // Check for Ctrl+Y to toggle AI interface visibility
+      if (event.ctrlKey && event.key === 'y') {
+        event.preventDefault(); // Prevent default browser behavior
+        setIsAiInterfaceVisible(prev => !prev); // Toggle AI interface visibility
+        addDebug(`Toggled AI interface visibility: ${!isAiInterfaceVisible ? 'ON' : 'OFF'}`);
+      }
     };
 
     // Add event listener
@@ -65,7 +75,7 @@ export default function Home() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [autoClearTranscript, addDebug, toggleDebugVisibility]);
+  }, [autoClearTranscript, isAiInterfaceVisible, addDebug, toggleDebugVisibility]);
 
   return (
     <div className="min-h-screen p-8 flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -96,17 +106,38 @@ export default function Home() {
           />
         )}
 
-        {/* Gemini Chat Interface - Only show when connected */}
-        {bluetooth.isConnected && (
-          <GeminiChat 
-            isListening={speech.isListening}
-            transcript={speech.transcript}
-            geminiResponse={gemini.geminiResponse}
-            isProcessing={gemini.isProcessing}
-            autoClearTranscript={autoClearTranscript}
-            isSpeechSupported={speech.isSpeechSupported}
-            toggleMicrophone={speech.toggleMicrophone}
-          />
+        {/* Gemini Chat Interface - Show when connected OR when explicitly toggled */}
+        {(bluetooth.isConnected || isAiInterfaceVisible) && (
+          <div className="mb-4">
+            {!bluetooth.isConnected && (
+              <div className="mb-3 p-2 bg-yellow-100 dark:bg-yellow-900/20 rounded text-sm text-yellow-700 dark:text-yellow-300">
+                <p className="flex items-center">
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  Not connected to device. Some features may be limited.
+                </p>
+              </div>
+            )}
+            <GeminiChat 
+              isListening={speech.isListening}
+              transcript={speech.transcript}
+              geminiResponse={gemini.geminiResponse}
+              isProcessing={gemini.isProcessing}
+              autoClearTranscript={autoClearTranscript}
+              isSpeechSupported={speech.isSpeechSupported}
+              toggleMicrophone={speech.toggleMicrophone}
+            />
+          </div>
+        )}
+
+        {/* AI Interface Shortcut Info */}
+        {!isAiInterfaceVisible && !bluetooth.isConnected && (
+          <div className="mb-6 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-center">
+            <p className="text-sm text-blue-600 dark:text-blue-300">
+              Press Ctrl+Y to access the AI interface without connecting
+            </p>
+          </div>
         )}
 
         {/* WiFi Status Display - Kept for informational purposes */}
