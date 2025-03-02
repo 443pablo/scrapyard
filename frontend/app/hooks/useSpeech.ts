@@ -11,7 +11,6 @@ export const useSpeech = (
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [isSpeechSupported, setIsSpeechSupported] = useState(false);
-  const [autoClearTranscript, setAutoClearTranscript] = useState(false);
 
   // Recognition instance reference
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
@@ -27,26 +26,6 @@ export const useSpeech = (
     setIsSpeechSupported('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
   }, []);
 
-  // Add keyboard event listener for autoclear toggle (Ctrl+L)
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Check for Ctrl+L to toggle autoclear behavior
-      if (event.ctrlKey && event.key === 'l') {
-        event.preventDefault(); // Prevent default browser behavior
-        setAutoClearTranscript(prev => !prev); // Toggle autoclear setting
-        addDebug(`Toggled auto-clear transcript: ${!autoClearTranscript ? 'ON' : 'OFF'}`);
-      }
-    };
-
-    // Add event listener
-    window.addEventListener('keydown', handleKeyDown);
-
-    // Cleanup event listener when component unmounts
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [autoClearTranscript, addDebug]);
-
   // Function to toggle microphone recording
   const toggleMicrophone = async (): Promise<void> => {
     if (!isListening) {
@@ -60,12 +39,6 @@ export const useSpeech = (
   const startListening = async (): Promise<void> => {
     try {
       setIsListening(true);
-      
-      // Only clear transcript if auto-clearing is enabled
-      if (autoClearTranscript) {
-        setTranscript('');
-        lastTranscriptRef.current = '';
-      }
       
       // Use Web Speech API directly
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -121,11 +94,6 @@ export const useSpeech = (
           // If we're still supposed to be listening, restart recognition
           if (isListening) {
             try {
-              // If auto-clear is enabled, clear the transcript between recognition sessions
-              if (autoClearTranscript) {
-                setTranscript('');
-              }
-              
               recognition.start();
               addDebug('Restarted speech recognition');
             } catch (error) {
@@ -140,7 +108,7 @@ export const useSpeech = (
         
         // Start recognition
         recognition.start();
-        addDebug(`Started continuous speech recognition with ${autoClearTranscript ? 'auto-clear enabled' : 'auto-clear disabled'}`);
+        addDebug(`Started continuous speech recognition`);
       } else {
         // Fallback for browsers that don't support SpeechRecognition
         addDebug('Speech recognition is not supported in this browser');
@@ -176,7 +144,6 @@ export const useSpeech = (
     isListening,
     transcript,
     isSpeechSupported,
-    autoClearTranscript,
     
     // Methods
     toggleMicrophone,

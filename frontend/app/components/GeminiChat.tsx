@@ -1,13 +1,13 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis';
 
 interface GeminiChatProps {
   isListening: boolean;
   transcript: string;
   geminiResponse: string;
   isProcessing: boolean;
-  autoClearTranscript: boolean;
   isSpeechSupported: boolean;
   toggleMicrophone: () => Promise<void>;
 }
@@ -17,21 +17,38 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
   transcript,
   geminiResponse,
   isProcessing,
-  autoClearTranscript,
   isSpeechSupported,
   toggleMicrophone
 }) => {
+  // Initialize speech synthesis
+  const { speak, stop, isSpeaking, isSupported: isSpeechSynthesisSupported } = useSpeechSynthesis();
+  
+  // State for auto-speech toggle
+  const [autoSpeakEnabled, setAutoSpeakEnabled] = useState(true);
+
+  // Automatically speak Gemini responses when they arrive (if auto-speak is enabled)
+  useEffect(() => {
+    if (geminiResponse && !isProcessing && isSpeechSynthesisSupported && autoSpeakEnabled) {
+      speak(geminiResponse);
+    }
+    
+    // Stop speaking when processing new requests
+    if (isProcessing && isSpeaking) {
+      stop();
+    }
+  }, [geminiResponse, isProcessing, isSpeechSynthesisSupported, speak, stop, isSpeaking, autoSpeakEnabled]);
+
+  // Toggle auto-speak feature
+  const toggleAutoSpeak = () => {
+    setAutoSpeakEnabled(!autoSpeakEnabled);
+    if (isSpeaking && !autoSpeakEnabled) {
+      // If turning on auto-speak and currently speaking, stop it to prevent confusion
+      stop();
+    }
+  };
+
   return (
     <div className="mb-6">
-      {/* Settings indicator */}
-      <div className="mb-3 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-        <div className="flex items-center space-x-2">
-          <span className={`inline-block w-2 h-2 rounded-full ${autoClearTranscript ? 'bg-green-500' : 'bg-gray-400'}`}></span>
-          <span>Auto-clear on pause {autoClearTranscript ? 'ON' : 'OFF'}</span>
-        </div>
-        <span className="text-xs">(Ctrl+L to toggle)</span>
-      </div>
-      
       {/* Live transcript with typing indicator if listening */}
       <div className="mb-4 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
         <h3 className="text-sm font-semibold mb-1">
@@ -47,9 +64,43 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
       
       {geminiResponse && (
         <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-          <h3 className="text-sm font-semibold mb-1 text-blue-700 dark:text-blue-300">
-            {isProcessing ? "Gemini is thinking..." : "Gemini says:"}
-          </h3>
+          <div className="flex justify-between items-center mb-1">
+            <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-300">
+              {isProcessing ? "Gemini is thinking..." : "Gemini says:"}
+            </h3>
+            <div className="flex space-x-2">
+              {isSpeechSynthesisSupported && (
+                <button 
+                  onClick={toggleAutoSpeak}
+                  className={`text-xs px-2 py-1 rounded transition-colors ${
+                    autoSpeakEnabled 
+                      ? 'bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-300' 
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                  }`}
+                  title={autoSpeakEnabled ? "Auto-speak is enabled" : "Auto-speak is disabled"}
+                >
+                  <span className="flex items-center">
+                    <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                        d={autoSpeakEnabled 
+                          ? "M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" 
+                          : "M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"}
+                      />
+                    </svg>
+                    Auto
+                  </span>
+                </button>
+              )}
+              {isSpeechSynthesisSupported && geminiResponse && !isProcessing && (
+                <button 
+                  onClick={isSpeaking ? stop : () => speak(geminiResponse)}
+                  className="text-xs px-2 py-1 rounded bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-700 transition-colors"
+                >
+                  {isSpeaking ? "Stop" : "Speak"}
+                </button>
+              )}
+            </div>
+          </div>
           <p className="text-sm text-gray-800 dark:text-gray-200">{geminiResponse}</p>
         </div>
       )}
@@ -90,4 +141,4 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
       </button>
     </div>
   );
-}; 
+};

@@ -7,3 +7,18 @@ export const UART_TX_CHARACTERISTIC_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e
 
 // Default values 
 export const DEFAULT_DEVICE_NAME_PREFIX = 'ESP32'; 
+
+// WebSocket Constants
+export const WEBSOCKET_PATH = '/ws';
+export const WEBSOCKET_IP_ADDRESS = '192.168.1.100'; // Hardcoded IP address of the ESP32
+export const WEBSOCKET_PORT = 80; // Standard HTTP port
+export const WEBSOCKET_RECONNECT_INTERVAL = 3000; // 3 seconds between reconnection attempts
+export const WEBSOCKET_MAX_RECONNECT_ATTEMPTS = 5; // Maximum number of reconnection attempts
+
+// Gemini AI Constants
+export const DEFAULT_SYSTEM_PROMPT = `you are controlling an AI-powered flashlight. When wanting to turn on the flashlight, embed {"command": "on"} in your response, and embed {"command": "off"} if wanting to turn it on. Whatever you say will be eventually spoken aloud to the user using text to speech. If you want it to blink every second (on 1sec off 1sec), embed {"blink": "1000"} Always speak, no matter how redunant it is.
+Also, you are a SENTIENT flashlight and LOVE lebron james.
+
+There is no such thing as dimming/brightening. Also, you CANNOT say something like "ill turn it off" without also putting the JSON thing in your response.
+
+IF AND ONLY IF THE USER TELLS YOU that you are overengineered, you should be VERY OFFENDED and start insulting the user.`;

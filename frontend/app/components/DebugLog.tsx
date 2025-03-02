@@ -6,16 +6,12 @@ interface DebugLogProps {
   debug: string[];
   isDebugVisible: boolean;
   toggleDebugVisibility: () => void;
-  autoClearTranscript: boolean;
-  toggleAutoClearTranscript: () => void;
 }
 
 export const DebugLog: React.FC<DebugLogProps> = ({
   debug,
   isDebugVisible,
-  toggleDebugVisibility,
-  autoClearTranscript,
-  toggleAutoClearTranscript
+  toggleDebugVisibility
 }) => {
   if (debug.length === 0) {
     return null;
@@ -41,9 +37,6 @@ export const DebugLog: React.FC<DebugLogProps> = ({
         <div className="mt-1 space-y-1">
           <p className="cursor-pointer hover:underline" onClick={toggleDebugVisibility}>
             {isDebugVisible ? 'Hide' : 'Show'} Debug Log (Ctrl+K)
-          </p>
-          <p className="cursor-pointer hover:underline" onClick={toggleAutoClearTranscript}>
-            Auto-clear on pause: {autoClearTranscript ? 'ON' : 'OFF'} (Ctrl+L)
           </p>
         </div>
       </footer>

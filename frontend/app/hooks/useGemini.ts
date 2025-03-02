@@ -30,7 +30,30 @@ export const useGemini = (config: GeminiConfig): GeminiState & GeminiServices =>
       const model = genAI.getGenerativeModel({ model: config.model });
       
       // Generate content
-      const result = await model.generateContent(text);
+      let result;
+      
+      // Use system prompt if available by creating a chat
+      if (config.systemPrompt) {
+        addDebug('Using system prompt for Gemini');
+        const chat = model.startChat({
+          history: [
+            {
+              role: 'user',
+              parts: [{ text: text }]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 2048,
+          },
+        });
+        
+        // Send the message with the system instructions prepended
+        result = await chat.sendMessage(config.systemPrompt + "\n\n" + text);
+      } else {
+        result = await model.generateContent(text);
+      }
+      
       const response = result.response;
       const responseText = response.text();
       
