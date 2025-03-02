@@ -130,7 +130,7 @@ export const useHttp = (): HttpState & HttpServices => {
 
   // Function to turn off the flashlight
   const turnOffFlashlight = useCallback(async (): Promise<void> => {
-    const response = await makeRequest<HttpResponse>("/flashlight/off");
+    const response = await makeRequest<HttpResponse>("/off");
 
     if (response && response.flashlight !== undefined) {
       setFlashlightStatus((prev) => ({
@@ -145,7 +145,7 @@ export const useHttp = (): HttpState & HttpServices => {
   const blinkFlashlight = useCallback(
     async (intervalMs: number): Promise<void> => {
       const response = await makeRequest<HttpResponse>(
-        `/flashlight/blink?interval=${intervalMs}`
+        `/blink?interval=${intervalMs}`
       );
 
       if (response) {
