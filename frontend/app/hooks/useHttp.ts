@@ -10,7 +10,7 @@ export const useHttp = (): HttpState & HttpServices => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ipAddress, setIpAddress] = useState<string | null>(null);
-  const [flashlightStatus, setFlashlightStatus] = useState<{
+  const [flashlightStatus, setSmartlightStatus] = useState<{
     on: boolean;
     available: boolean;
   }>({ on: false, available: true });
@@ -88,7 +88,7 @@ export const useHttp = (): HttpState & HttpServices => {
         addDebug("HTTP connection established");
         setIsConnected(true);
 
-        setFlashlightStatus((prev) => ({
+        setSmartlightStatus((prev) => ({
           ...prev,
           on: false,
         }));
@@ -103,11 +103,11 @@ export const useHttp = (): HttpState & HttpServices => {
   );
 
   // Function to toggle the flashlight
-  const toggleFlashlight = useCallback(async (): Promise<void> => {
+  const toggleSmartlight = useCallback(async (): Promise<void> => {
     const response = await makeRequest<HttpResponse>("/toggle");
 
     if (response && response.flashlight !== undefined) {
-      setFlashlightStatus((prev) => ({
+      setSmartlightStatus((prev) => ({
         ...prev,
         on: Boolean(response.flashlight),
       }));
@@ -116,11 +116,11 @@ export const useHttp = (): HttpState & HttpServices => {
   }, [makeRequest, addDebug]);
 
   // Function to turn on the flashlight
-  const turnOnFlashlight = useCallback(async (): Promise<void> => {
+  const turnOnSmartlight = useCallback(async (): Promise<void> => {
     const response = await makeRequest<HttpResponse>("/on");
 
     if (response && response.flashlight !== undefined) {
-      setFlashlightStatus((prev) => ({
+      setSmartlightStatus((prev) => ({
         ...prev,
         on: Boolean(response.flashlight),
       }));
@@ -129,11 +129,11 @@ export const useHttp = (): HttpState & HttpServices => {
   }, [makeRequest, addDebug]);
 
   // Function to turn off the flashlight
-  const turnOffFlashlight = useCallback(async (): Promise<void> => {
+  const turnOffSmartlight = useCallback(async (): Promise<void> => {
     const response = await makeRequest<HttpResponse>("/off");
 
     if (response && response.flashlight !== undefined) {
-      setFlashlightStatus((prev) => ({
+      setSmartlightStatus((prev) => ({
         ...prev,
         on: Boolean(response.flashlight),
       }));
@@ -142,10 +142,10 @@ export const useHttp = (): HttpState & HttpServices => {
   }, [makeRequest, addDebug]);
 
   // Function to make the flashlight blink
-  const blinkFlashlight = useCallback(
+  const blinkSmartlight = useCallback(
     async (intervalMs: number): Promise<void> => {
       const response = await makeRequest<HttpResponse>(
-        `/blink?interval=${intervalMs}`
+        `/flash?interval=${intervalMs}`
       );
 
       if (response) {
@@ -156,9 +156,9 @@ export const useHttp = (): HttpState & HttpServices => {
   );
 
   // Function to get the flashlight status
-  const getFlashlightStatus = useCallback(async (): Promise<void> => {
+  const getSmartlightStatus = useCallback(async (): Promise<void> => {
     // Status endpoint is not available, so we'll just maintain API compatibility
-    addDebug('Flashlight status check - no endpoint available');
+    addDebug('Smartlight status check - no endpoint available');
     // No requests are made
   }, [addDebug]);
 
@@ -177,10 +177,10 @@ export const useHttp = (): HttpState & HttpServices => {
     ipAddress,
     connectToDevice,
     disconnectDevice,
-    toggleFlashlight,
-    turnOnFlashlight,
-    turnOffFlashlight,
-    blinkFlashlight,
-    getFlashlightStatus,
+    toggleSmartlight,
+    turnOnSmartlight,
+    turnOffSmartlight,
+    blinkSmartlight,
+    getSmartlightStatus,
   };
 };

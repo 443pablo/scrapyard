@@ -48,7 +48,7 @@ def toggle_flashlight():
         
     return {
         "status": "success", 
-        "message": f"Flashlight turned {'ON' if flashlight_state else 'OFF'}",
+        "message": f"Smartlight turned {'ON' if flashlight_state else 'OFF'}",
         "flashlight": flashlight_state
     }
 
@@ -61,13 +61,13 @@ def flashlight_on():
         print("FLASHLIGHT: ON")
         return {
             "status": "success", 
-            "message": "Flashlight turned ON",
+            "message": "Smartlight turned ON",
             "flashlight": True
         }
     else:
         return {
             "status": "success", 
-            "message": "Flashlight is already ON",
+            "message": "Smartlight is already ON",
             "flashlight": True
         }
 
@@ -80,13 +80,13 @@ def flashlight_off():
         print("FLASHLIGHT: OFF")
         return {
             "status": "success", 
-            "message": "Flashlight turned OFF",
+            "message": "Smartlight turned OFF",
             "flashlight": False
         }
     else:
         return {
             "status": "success", 
-            "message": "Flashlight is already OFF",
+            "message": "Smartlight is already OFF",
             "flashlight": False
         }
 
@@ -96,7 +96,7 @@ def blink_flashlight(interval_ms=1000):
     print(f"FLASHLIGHT: BLINKING every {interval_sec} seconds (simulated)")
     return {
         "status": "success",
-        "message": f"Flashlight blinking simulation started (interval: {interval_sec}s)",
+        "message": f"Smartlight blinking simulation started (interval: {interval_sec}s)",
         "blink": interval_ms
     }
 
@@ -188,7 +188,7 @@ try:
     def route_flashlight_status(request: Request):
         status = {
             "status": "success",
-            "message": f"Flashlight is {'ON' if flashlight_state else 'OFF'}",
+            "message": f"Smartlight is {'ON' if flashlight_state else 'OFF'}",
             "flashlight": flashlight_state
         }
         return Response(request, json.dumps(status), content_type="application/json")

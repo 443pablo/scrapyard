@@ -12,11 +12,11 @@ export interface HttpState {
 export interface HttpServices {
   connectToDevice: (ipAddress: string) => Promise<void>;
   disconnectDevice: () => void;
-  toggleFlashlight: () => Promise<void>;
-  turnOnFlashlight: () => Promise<void>;
-  turnOffFlashlight: () => Promise<void>;
-  blinkFlashlight: (intervalMs: number) => Promise<void>;
-  getFlashlightStatus: () => Promise<void>;
+  toggleSmartlight: () => Promise<void>;
+  turnOnSmartlight: () => Promise<void>;
+  turnOffSmartlight: () => Promise<void>;
+  blinkSmartlight: (intervalMs: number) => Promise<void>;
+  getSmartlightStatus: () => Promise<void>;
 }
 
 export interface HttpResponse {

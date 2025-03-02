@@ -19,7 +19,7 @@ export const useBluetooth = (deviceNamePrefix: string): BluetoothState & Bluetoo
     ip?: string;
     message?: string;
   } | null>(null);
-  const [flashlightStatus, setFlashlightStatus] = useState<{
+  const [flashlightStatus, setSmartlightStatus] = useState<{
     on: boolean;
     available: boolean;
   }>({ on: false, available: true });
@@ -121,7 +121,7 @@ export const useBluetooth = (deviceNamePrefix: string): BluetoothState & Bluetoo
   };
   
   // Function to toggle the flashlight (minimal implementation since WebSocket will handle this)
-  const toggleFlashlight = async (): Promise<void> => {
+  const toggleSmartlight = async (): Promise<void> => {
     try {
       addDebug('Sending toggle_flashlight command via Bluetooth (fallback method)...');
       
@@ -135,13 +135,13 @@ export const useBluetooth = (deviceNamePrefix: string): BluetoothState & Bluetoo
       const success = await sendCommand('toggle_flashlight');
       
       if (success) {
-        setSuccessMessage('Flashlight toggle command sent via Bluetooth');
+        setSuccessMessage('Smartlight toggle command sent via Bluetooth');
         addDebug(`Bluetooth flashlight toggle command sent (WebSocket preferred when available)`);
       }
     } catch (error) {
       console.error('Error toggling flashlight:', error);
       setError(`Failed to toggle flashlight: ${error instanceof Error ? error.message : String(error)}`);
-      addDebug(`Error in toggleFlashlight: ${error instanceof Error ? error.message : String(error)}`);
+      addDebug(`Error in toggleSmartlight: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -249,7 +249,7 @@ export const useBluetooth = (deviceNamePrefix: string): BluetoothState & Bluetoo
                   
                   // Still handle flashlight state updates for backward compatibility
                   if (responseData.hasOwnProperty('flashlight') !== undefined) {
-                    setFlashlightStatus({
+                    setSmartlightStatus({
                       on: responseData.flashlight,
                       available: true
                     });
@@ -315,6 +315,6 @@ export const useBluetooth = (deviceNamePrefix: string): BluetoothState & Bluetoo
     // Methods
     connectToDevice,
     sendCommand,
-    toggleFlashlight
+    toggleSmartlight
   };
 }; 

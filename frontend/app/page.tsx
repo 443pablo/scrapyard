@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { 
   ConnectionStatus, 
   GeminiChat, 
   DebugLog,
-  HttpFlashlightControl,
+  HttpSmartlightControl,
   GeminiResponseDisplay
 } from "./components";
 import { 
@@ -53,9 +53,9 @@ export default function Home() {
   useGeminiCommandDetector(
     gemini.geminiResponse,
     {
-      turnOnFlashlight: http.turnOnFlashlight,
-      turnOffFlashlight: http.turnOffFlashlight,
-      blinkFlashlight: http.blinkFlashlight,
+      turnOnSmartlight: http.turnOnSmartlight,
+      turnOffSmartlight: http.turnOffSmartlight,
+      blinkSmartlight: http.blinkSmartlight,
       connectToDevice: http.connectToDevice
     },
     http.isConnected
@@ -69,9 +69,6 @@ export default function Home() {
   const MAX_RETRY_COUNT = 3;
   const RETRY_DELAY_MS = 3000;
   
-  // Track processed responses to prevent duplicates
-  const processedResponseRef = useRef<string | null>(null);
-  
   // Function to attempt HTTP connection
   const attemptHttpConnection = useCallback(() => {
     if (bluetooth.isConnected && 
@@ -79,9 +76,9 @@ export default function Home() {
         !http.isConnecting) {
       
       // Use a default IP or get it from environment
-      const deviceIp = process.env.NEXT_PUBLIC_DEVICE_IP || '192.168.137.138';
+      const deviceIp = process.env.NEXT_PUBLIC_DEVICE_IP || '192.168.137.179';
       // Format with port if needed
-      const httpAddress = HTTP_PORT !== 80 ? `${deviceIp}:${HTTP_PORT}` : deviceIp;
+      const httpAddress = HTTP_PORT ? `${deviceIp}:${HTTP_PORT}` : deviceIp;
       
       addDebug(`Connecting to HTTP at ${httpAddress} (Attempt ${httpRetryCount + 1}/${MAX_RETRY_COUNT})`);
       http.connectToDevice(httpAddress);
@@ -116,67 +113,6 @@ export default function Home() {
       setHttpRetryCount(0);
     }
   }, [http.error, http.isConnected, http.isConnecting, httpRetryCount, MAX_RETRY_COUNT, addDebug, attemptHttpConnection]);
-  
-  // Hook to handle Gemini responses for controlling the flashlight
-  useEffect(() => {
-    if (!gemini.geminiResponse) return;
-    
-    // Check if we've already processed this exact response
-    if (processedResponseRef.current === gemini.geminiResponse) {
-      return;
-    }
-    
-    // Mark this response as processed
-    processedResponseRef.current = gemini.geminiResponse;
-    
-    try {
-      // Check if there's a JSON command in the response
-      const commandMatch = gemini.geminiResponse.match(/\{.*"command".*\}/);
-      const blinkMatch = gemini.geminiResponse.match(/\{.*"blink".*\}/);
-      
-      if (commandMatch) {
-        const commandData = JSON.parse(commandMatch[0]);
-        
-        if (commandData.command === "on") {
-          addDebug("AI requested to turn flashlight ON");
-          
-          // Use HTTP for flashlight control if connected
-          if (http.isConnected) {
-            http.turnOnFlashlight();
-          } else {
-            addDebug("Cannot turn on flashlight: HTTP not connected");
-          }
-        } 
-        else if (commandData.command === "off") {
-          addDebug("AI requested to turn flashlight OFF");
-          
-          // Use HTTP for flashlight control if connected
-          if (http.isConnected) {
-            http.turnOffFlashlight();
-          } else {
-            addDebug("Cannot turn off flashlight: HTTP not connected");
-          }
-        }
-      }
-      
-      if (blinkMatch) {
-        const blinkData = JSON.parse(blinkMatch[0]);
-        const blinkInterval = parseInt(blinkData.blink);
-        
-        if (!isNaN(blinkInterval)) {
-          addDebug(`AI requested to blink flashlight every ${blinkInterval}ms`);
-          
-          if (http.isConnected) {
-            http.blinkFlashlight(blinkInterval);
-          } else {
-            addDebug("Cannot blink flashlight: HTTP not connected");
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Error parsing AI command:", e);
-    }
-  }, [gemini.geminiResponse, http, addDebug]);
   
   // Add keyboard event listeners for debug toggle (Ctrl+K) and AI interface toggle (Ctrl+Y)
   useEffect(() => {
@@ -253,12 +189,12 @@ export default function Home() {
 
         {/* Show HTTP flashlight controls when HTTP is connected */}
         {http.isConnected && (
-          <HttpFlashlightControl 
+          <HttpSmartlightControl 
             flashlightStatus={http.flashlightStatus}
-            toggleFlashlight={http.toggleFlashlight}
-            turnOnFlashlight={http.turnOnFlashlight}
-            turnOffFlashlight={http.turnOffFlashlight}
-            blinkFlashlight={http.blinkFlashlight}
+            toggleSmartlight={http.toggleSmartlight}
+            turnOnSmartlight={http.turnOnSmartlight}
+            turnOffSmartlight={http.turnOffSmartlight}
+            blinkSmartlight={http.blinkSmartlight}
           />
         )}
         

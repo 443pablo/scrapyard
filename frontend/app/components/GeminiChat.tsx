@@ -70,7 +70,7 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
         <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
           <div className="flex justify-between items-center mb-1">
             <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-300">
-              Flashlight is thinking...
+              Smartlight is thinking...
             </h3>
           </div>
         </div>

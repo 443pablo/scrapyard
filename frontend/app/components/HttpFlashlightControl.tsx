@@ -1,22 +1,22 @@
 import React, { useState } from 'react';
 
-interface HttpFlashlightControlProps {
+interface HttpSmartlightControlProps {
   flashlightStatus: {
     on: boolean;
     available: boolean;
   };
-  toggleFlashlight: () => Promise<void>;
-  turnOnFlashlight: () => Promise<void>;
-  turnOffFlashlight: () => Promise<void>;
-  blinkFlashlight: (intervalMs: number) => Promise<void>;
+  toggleSmartlight: () => Promise<void>;
+  turnOnSmartlight: () => Promise<void>;
+  turnOffSmartlight: () => Promise<void>;
+  blinkSmartlight: (intervalMs: number) => Promise<void>;
 }
 
-export const HttpFlashlightControl: React.FC<HttpFlashlightControlProps> = ({
+export const HttpSmartlightControl: React.FC<HttpSmartlightControlProps> = ({
   flashlightStatus,
-  toggleFlashlight,
-  turnOnFlashlight,
-  turnOffFlashlight,
-  blinkFlashlight,
+  toggleSmartlight,
+  turnOnSmartlight,
+  turnOffSmartlight,
+  blinkSmartlight,
 }) => {
   const [blinkInterval, setBlinkInterval] = useState('1000');
   const [isBlinking, setIsBlinking] = useState(false);
@@ -25,7 +25,7 @@ export const HttpFlashlightControl: React.FC<HttpFlashlightControlProps> = ({
     const interval = parseInt(blinkInterval);
     if (!isNaN(interval) && interval > 0) {
       setIsBlinking(true);
-      blinkFlashlight(interval).then(() => {
+      blinkSmartlight(interval).then(() => {
         setTimeout(() => setIsBlinking(false), 2000);
       });
     }
@@ -35,9 +35,9 @@ export const HttpFlashlightControl: React.FC<HttpFlashlightControlProps> = ({
   if (!flashlightStatus.available) {
     return (
       <div className="mb-6 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg shadow">
-        <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Flashlight Control</h2>
+        <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-white">Smartlight Control</h2>
         <p className="text-sm text-gray-600 dark:text-gray-400">
-          Flashlight is not available on this device.
+          Smartlight is not available on this device.
         </p>
       </div>
     );
@@ -45,7 +45,7 @@ export const HttpFlashlightControl: React.FC<HttpFlashlightControlProps> = ({
   
   return (
     <div className="mb-6 p-4 bg-white dark:bg-gray-800 rounded-lg shadow">
-      <h2 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">Flashlight Control</h2>
+      <h2 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">Smartlight Control</h2>
       
       <div className="flex flex-col space-y-4">
         {/* Status indicator */}
@@ -62,7 +62,7 @@ export const HttpFlashlightControl: React.FC<HttpFlashlightControlProps> = ({
         {/* Control buttons */}
         <div className="grid grid-cols-2 gap-3">
           <button
-            onClick={turnOnFlashlight}
+            onClick={turnOnSmartlight}
             disabled={flashlightStatus.on}
             className={`py-2 rounded-lg font-medium transition-colors ${
               flashlightStatus.on 
@@ -74,7 +74,7 @@ export const HttpFlashlightControl: React.FC<HttpFlashlightControlProps> = ({
           </button>
           
           <button
-            onClick={turnOffFlashlight}
+            onClick={turnOffSmartlight}
             disabled={!flashlightStatus.on}
             className={`py-2 rounded-lg font-medium transition-colors ${
               !flashlightStatus.on 
@@ -87,10 +87,10 @@ export const HttpFlashlightControl: React.FC<HttpFlashlightControlProps> = ({
         </div>
         
         <button
-          onClick={toggleFlashlight}
+          onClick={toggleSmartlight}
           className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
         >
-          Toggle Flashlight
+          Toggle Smartlight
         </button>
         
         {/* Blink control */}

@@ -12,11 +12,13 @@ interface GeminiCommand {
 
 export const useGeminiCommandDetector = (
   geminiResponse: string,
-  httpServices: Pick<HttpServices, 'turnOnFlashlight' | 'turnOffFlashlight' | 'blinkFlashlight' | 'connectToDevice'>,
+  httpServices: Pick<HttpServices, 'turnOnSmartlight' | 'turnOffSmartlight' | 'blinkSmartlight' | 'connectToDevice'>,
   isHttpConnected: boolean
 ) => {
   const { addDebug } = useDebug();
   const hasConnectedRef = useRef(false);
+  // Add a ref to track the last processed response
+  const lastProcessedResponseRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Parse commands from Gemini response
@@ -24,6 +26,14 @@ export const useGeminiCommandDetector = (
       try {
         // First, ensure we have a response to process
         if (!geminiResponse) return;
+
+        // Check if we've already processed this exact response to prevent infinite loops
+        if (lastProcessedResponseRef.current === geminiResponse) {
+          return;
+        }
+        
+        // Mark this response as processed
+        lastProcessedResponseRef.current = geminiResponse;
 
         // Try to connect to HTTP server if not already connected
         if (!isHttpConnected && !hasConnectedRef.current) {
@@ -50,10 +60,10 @@ export const useGeminiCommandDetector = (
             if (parsedCommand.command) {
               if (parsedCommand.command === 'on') {
                 addDebug('Detected command: ON - Turning flashlight on');
-                await httpServices.turnOnFlashlight();
+                await httpServices.turnOnSmartlight();
               } else if (parsedCommand.command === 'off') {
                 addDebug('Detected command: OFF - Turning flashlight off');
-                await httpServices.turnOffFlashlight();
+                await httpServices.turnOffSmartlight();
               }
             }
             
@@ -63,7 +73,7 @@ export const useGeminiCommandDetector = (
               const blinkInterval = parseInt(parsedCommand.blink, 10);
               if (!isNaN(blinkInterval)) {
                 addDebug(`Detected command: BLINK (${blinkInterval}ms) - Making flashlight blink`);
-                await httpServices.blinkFlashlight(blinkInterval);
+                await httpServices.blinkSmartlight(blinkInterval);
               }
             }
           } catch (error) {

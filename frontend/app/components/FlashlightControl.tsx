@@ -2,22 +2,22 @@
 
 import React from 'react';
 
-interface FlashlightControlProps {
+interface SmartlightControlProps {
   flashlightStatus: {
     on: boolean;
     available: boolean;
   };
-  toggleFlashlight: () => Promise<void>;
+  toggleSmartlight: () => Promise<void>;
 }
 
-export const FlashlightControl: React.FC<FlashlightControlProps> = ({
+export const SmartlightControl: React.FC<SmartlightControlProps> = ({
   flashlightStatus,
-  toggleFlashlight
+  toggleSmartlight
 }) => {
   return (
     <div className="mb-6">
       <div className="p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
-        <h3 className="font-medium mb-3 text-gray-900 dark:text-white">Flashlight Control</h3>
+        <h3 className="font-medium mb-3 text-gray-900 dark:text-white">Smartlight Control</h3>
         
         {flashlightStatus.available ? (
           <div className="flex flex-col items-center">
@@ -43,19 +43,19 @@ export const FlashlightControl: React.FC<FlashlightControlProps> = ({
             </div>
             
             <button
-              onClick={toggleFlashlight}
+              onClick={toggleSmartlight}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
             >
-              {flashlightStatus.on ? 'Turn Off Flashlight' : 'Turn On Flashlight'}
+              {flashlightStatus.on ? 'Turn Off Smartlight' : 'Turn On Smartlight'}
             </button>
             
             <p className="mt-3 text-sm text-center text-gray-600 dark:text-gray-400">
-              Flashlight is currently {flashlightStatus.on ? 'ON' : 'OFF'}
+              Smartlight is currently {flashlightStatus.on ? 'ON' : 'OFF'}
             </p>
           </div>
         ) : (
           <p className="text-center text-gray-600 dark:text-gray-400">
-            Flashlight feature is not available on this device.
+            Smartlight feature is not available on this device.
           </p>
         )}
       </div>

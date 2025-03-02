@@ -64,7 +64,7 @@ export const GeminiResponseDisplay: React.FC<GeminiResponseDisplayProps> = ({
     <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
       <div className="flex justify-between items-center mb-1">
         <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-300">
-          Flashlight says:
+          Smartlight says:
         </h3>
       </div>
       <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">

@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Flashlight Dashboard",
+  title: "Smartlight Dashboard",
   description: "Dashboard for the flashlight",
 };
 
