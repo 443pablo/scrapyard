@@ -55,10 +55,8 @@ export default function Home() {
   const MAX_RETRY_COUNT = 3;
   const RETRY_DELAY_MS = 3000;
   
-  // State for secret auto-speak feature (hidden command)
-  const [secretAutoSpeakEnabled, setSecretAutoSpeakEnabled] = useState(false);
-  // State to track if response should be visible
-  const [isResponseVisible, setIsResponseVisible] = useState(true);
+  // State for response visibility (always visible)
+  const isResponseVisible = true;
   
   // Track processed responses to prevent duplicates
   const processedResponseRef = useRef<string | null>(null);
@@ -181,19 +179,6 @@ export default function Home() {
         toggleDebugVisibility(); // Toggle debug visibility
       }
       
-      // Secret command handler (Ctrl+O) - This is a hidden feature
-      if (event.ctrlKey && event.key === 'o') {
-        event.preventDefault(); // Prevent default browser behavior
-        // Toggle secret auto-speak and response visibility
-        setSecretAutoSpeakEnabled(prev => {
-          const newValue = !prev;
-          console.log(`Setting secretAutoSpeakEnabled to: ${newValue}`);
-          return newValue;
-        });
-        setIsResponseVisible(!secretAutoSpeakEnabled);
-        addDebug(`Secret auto-speak command activated: ${!secretAutoSpeakEnabled ? 'ON' : 'OFF'}`);
-      }
-      
       // Check for Ctrl+Y to toggle AI interface visibility
       if (event.ctrlKey && event.key === 'y') {
         event.preventDefault(); // Prevent default browser behavior
@@ -209,7 +194,7 @@ export default function Home() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isAiInterfaceVisible, secretAutoSpeakEnabled, addDebug, toggleDebugVisibility]);
+  }, [isAiInterfaceVisible, addDebug, toggleDebugVisibility]);
 
   return (
     <div className="min-h-screen p-8 flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -290,7 +275,6 @@ export default function Home() {
               isProcessing={gemini.isProcessing}
               isSpeechSupported={speech.isSpeechSupported}
               toggleMicrophone={speech.toggleMicrophone}
-              secretAutoSpeakEnabled={secretAutoSpeakEnabled}
               isResponseVisible={isResponseVisible}
             />
           </div>

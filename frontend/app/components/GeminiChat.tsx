@@ -10,7 +10,6 @@ interface GeminiChatProps {
   isProcessing: boolean;
   isSpeechSupported: boolean;
   toggleMicrophone: () => Promise<void>;
-  secretAutoSpeakEnabled?: boolean;
   isResponseVisible?: boolean;
 }
 
@@ -21,7 +20,6 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
   isProcessing,
   isSpeechSupported,
   toggleMicrophone,
-  secretAutoSpeakEnabled = false,
   isResponseVisible = true
 }) => {
   // Initialize speech synthesis
@@ -30,19 +28,15 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
   // Track the response we've already tried to speak
   const spokenResponseRef = useRef<string | null>(null);
   
-  // Automatically speak Gemini responses when they arrive (if secret auto-speak is enabled)
+  // Automatically speak Gemini responses when they arrive
   useEffect(() => {
-    if (geminiResponse && !isProcessing && isSpeechSynthesisSupported && secretAutoSpeakEnabled) {
+    if (geminiResponse && !isProcessing && isSpeechSynthesisSupported) {
       // Only attempt to speak if this is a new response or we haven't tried to speak it yet
       if (spokenResponseRef.current !== geminiResponse) {
-        console.log("Auto-speak is enabled, attempting to speak");
+        console.log("Speaking AI response");
         spokenResponseRef.current = geminiResponse;
         speak(geminiResponse);
-      } else {
-        console.log("Already attempted to speak this response, not trying again");
       }
-    } else if (geminiResponse && !secretAutoSpeakEnabled) {
-      console.log("Auto-speak is disabled, not speaking response");
     }
     
     // Stop speaking when processing new requests
@@ -51,7 +45,7 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
       // Reset the spoken response ref when processing starts
       spokenResponseRef.current = null;
     }
-  }, [geminiResponse, isProcessing, isSpeechSynthesisSupported, speak, stop, isSpeaking, secretAutoSpeakEnabled]);
+  }, [geminiResponse, isProcessing, isSpeechSynthesisSupported, speak, stop, isSpeaking]);
 
   return (
     <div className="mb-6">
@@ -74,21 +68,6 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
             <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-300">
               {isProcessing ? "Flashlight is thinking..." : "Flashlight says:"}
             </h3>
-            {/* Auto-speak toggle button */}
-            <button 
-              onClick={() => {
-                // We don't have direct access to setSecretAutoSpeakEnabled,
-                // so let's simulate the keyboard shortcut
-                const event = new KeyboardEvent('keydown', {
-                  key: 'o',
-                  ctrlKey: true,
-                });
-                window.dispatchEvent(event);
-              }}
-              className="text-xs px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-700 dark:text-gray-300"
-            >
-              Auto-speak: {secretAutoSpeakEnabled ? 'ON' : 'OFF'}
-            </button>
           </div>
           {/* Show response based on visibility setting */}
           {isResponseVisible && (
