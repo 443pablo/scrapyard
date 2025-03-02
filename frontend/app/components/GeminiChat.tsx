@@ -53,7 +53,7 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
   return (
     <div className="mb-6">
       {/* Live transcript with typing indicator if listening */}
-      <div className="mb-4 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+      <div className="mb-4 p-3 bg-gray-100 rounded-lg">
         <h3 className="text-sm font-semibold mb-1">
           {isListening ? "Listening..." : "You said:"}
         </h3>

@@ -142,11 +142,11 @@ export default function Home() {
   }, [isAiInterfaceVisible, addDebug, toggleDebugVisibility]);
 
   return (
-    <div className="min-h-screen p-8 flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900">
-      <main className="w-full max-w-md p-6 bg-white dark:bg-gray-800 rounded-xl shadow-md">
+    <div className="min-h-screen p-8 flex flex-col items-center justify-center">
+      <main className="w-full max-w-md p-6 bg-white rounded-xl shadow-md">
         <div className="flex flex-col items-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{appName}</h1>
-          <p className="text-sm text-gray-600 dark:text-gray-300 text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">{appName}</h1>
+          <p className="text-sm text-gray-600 text-center">
             Connect to your next-generation flashlight and interact with it using your voice.
           </p>
         </div>
@@ -181,7 +181,7 @@ export default function Home() {
                   : 'Connection failed'}
             </span>
             {httpRetryCount > 0 && !http.isConnected && (
-              <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">
+              <span className="ml-2 text-xs text-amber-600">
                 (Retry {httpRetryCount}/{MAX_RETRY_COUNT})
               </span>
             )}
