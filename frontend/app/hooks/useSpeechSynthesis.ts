@@ -8,6 +8,7 @@ export const useSpeechSynthesis = (): SpeechSynthesisState & SpeechSynthesisServ
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isSupported, setIsSupported] = useState(false);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const hasErrorRef = useRef(false);
   const { addDebug } = useDebug();
 
   // Check if Web Speech API synthesis is supported
@@ -44,15 +45,29 @@ export const useSpeechSynthesis = (): SpeechSynthesisState & SpeechSynthesisServ
   }, []);
 
   const speak = (text: string) => {
-    if (!text || !isSupported) return;
+    if (!text || !isSupported) {
+      addDebug(`Speech synthesis skipped: ${!text ? 'Empty text' : 'Not supported'}`);
+      return;
+    }
+
+    // If we've had a recent error, don't try again immediately
+    if (hasErrorRef.current) {
+      addDebug('Speech synthesis skipped: Previous attempt failed, waiting for reset');
+      return;
+    }
 
     // Clean text - remove any JSON-like code blocks that might be in the response
     const cleanText = text.replace(/\{.*?\}/g, '').trim();
+    addDebug(`Preparing to speak (text length: ${cleanText.length} chars)`);
     
-    if (!cleanText) return;
+    if (!cleanText) {
+      addDebug('Speech synthesis skipped: Text was empty after cleaning');
+      return;
+    }
 
     // Stop any current speech
     if (utteranceRef.current && window.speechSynthesis.speaking) {
+      addDebug('Stopping current speech before starting new speech');
       stop();
     }
 
@@ -62,6 +77,8 @@ export const useSpeechSynthesis = (): SpeechSynthesisState & SpeechSynthesisServ
 
       // Set voice preferences (optional)
       const voices = window.speechSynthesis.getVoices();
+      addDebug(`Available voices: ${voices.length}`);
+      
       const preferredVoice = voices.find(voice => 
         voice.lang === 'en-US' && !voice.localService
       );
@@ -73,6 +90,8 @@ export const useSpeechSynthesis = (): SpeechSynthesisState & SpeechSynthesisServ
         // If no preferred voice is found, use the first available one
         utterance.voice = voices[0];
         addDebug(`Using default voice: ${voices[0].name}`);
+      } else {
+        addDebug('No voices available, using system default');
       }
 
       // Set speech properties
@@ -83,25 +102,43 @@ export const useSpeechSynthesis = (): SpeechSynthesisState & SpeechSynthesisServ
       // Event handlers
       utterance.onstart = () => {
         setIsSpeaking(true);
+        hasErrorRef.current = false;
         addDebug('Started speaking AI response');
       };
 
       utterance.onend = () => {
         setIsSpeaking(false);
+        hasErrorRef.current = false;
         addDebug('Finished speaking AI response');
       };
 
       utterance.onerror = (event) => {
         setIsSpeaking(false);
+        hasErrorRef.current = true;
         addDebug(`Speech synthesis error: ${event.error}`);
+        
+        // After a delay, clear the error state
+        setTimeout(() => {
+          hasErrorRef.current = false;
+          addDebug('Speech synthesis error state reset');
+        }, 2000);
       };
 
       // Speak the text
+      addDebug('Attempting to start speech synthesis...');
       window.speechSynthesis.speak(utterance);
+      addDebug('Speech synthesis request sent');
     } catch (error) {
       console.error('Error with speech synthesis:', error);
       addDebug(`Speech synthesis error: ${error instanceof Error ? error.message : String(error)}`);
       setIsSpeaking(false);
+      hasErrorRef.current = true;
+      
+      // After a delay, clear the error state
+      setTimeout(() => {
+        hasErrorRef.current = false;
+        addDebug('Speech synthesis error state reset');
+      }, 2000);
     }
   };
 

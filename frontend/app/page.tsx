@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { 
   ConnectionStatus, 
   GeminiChat, 
@@ -60,6 +60,9 @@ export default function Home() {
   // State to track if response should be visible
   const [isResponseVisible, setIsResponseVisible] = useState(true);
   
+  // Track processed responses to prevent duplicates
+  const processedResponseRef = useRef<string | null>(null);
+  
   // Helper to determine if we're connected using either method
   const isConnectedAny = bluetooth.isConnected || http.isConnected;
   
@@ -111,6 +114,14 @@ export default function Home() {
   // Hook to handle Gemini responses for controlling the flashlight
   useEffect(() => {
     if (!gemini.geminiResponse) return;
+    
+    // Check if we've already processed this exact response
+    if (processedResponseRef.current === gemini.geminiResponse) {
+      return;
+    }
+    
+    // Mark this response as processed
+    processedResponseRef.current = gemini.geminiResponse;
     
     try {
       // Check if there's a JSON command in the response
@@ -174,9 +185,13 @@ export default function Home() {
       if (event.ctrlKey && event.key === 'o') {
         event.preventDefault(); // Prevent default browser behavior
         // Toggle secret auto-speak and response visibility
-        setSecretAutoSpeakEnabled(prev => !prev);
+        setSecretAutoSpeakEnabled(prev => {
+          const newValue = !prev;
+          console.log(`Setting secretAutoSpeakEnabled to: ${newValue}`);
+          return newValue;
+        });
         setIsResponseVisible(!secretAutoSpeakEnabled);
-        addDebug(`Secret command activated: ${!secretAutoSpeakEnabled ? 'ON' : 'OFF'}`);
+        addDebug(`Secret auto-speak command activated: ${!secretAutoSpeakEnabled ? 'ON' : 'OFF'}`);
       }
       
       // Check for Ctrl+Y to toggle AI interface visibility
