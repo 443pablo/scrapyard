@@ -13,14 +13,10 @@ export const DebugLog: React.FC<DebugLogProps> = ({
   isDebugVisible,
   toggleDebugVisibility
 }) => {
-  if (debug.length === 0) {
-    return null;
-  }
-
   return (
     <>
       <div className="relative">
-        {isDebugVisible && (
+        {isDebugVisible && debug.length > 0 && (
           <div className="mt-2 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg text-xs font-mono overflow-auto max-h-60">
             <h3 className="text-sm font-semibold mb-2">Debug Log:</h3>
             <ul className="space-y-1">
@@ -32,8 +28,8 @@ export const DebugLog: React.FC<DebugLogProps> = ({
         )}
       </div>
       
-      <footer className="mt-8 text-center text-sm text-gray-500 dark:text-gray-400">
-        <p>Powered by Gemini AI</p>
+      <footer className="mt-8 text-center text-sm text-gray-500 dark:text-gray-400 pt-4 pb-8">
+        <p>Built for Scrapyard Flagship</p>
         <div className="mt-1 space-y-1">
           <p className="cursor-pointer hover:underline" onClick={toggleDebugVisibility}>
             {isDebugVisible ? 'Hide' : 'Show'} Debug Log (Ctrl+K)

@@ -10,6 +10,8 @@ interface GeminiChatProps {
   isProcessing: boolean;
   isSpeechSupported: boolean;
   toggleMicrophone: () => Promise<void>;
+  secretAutoSpeakEnabled?: boolean;
+  isResponseVisible?: boolean;
 }
 
 export const GeminiChat: React.FC<GeminiChatProps> = ({
@@ -18,7 +20,9 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
   geminiResponse,
   isProcessing,
   isSpeechSupported,
-  toggleMicrophone
+  toggleMicrophone,
+  secretAutoSpeakEnabled = false,
+  isResponseVisible = true
 }) => {
   // Initialize speech synthesis
   const { speak, stop, isSpeaking, isSupported: isSpeechSynthesisSupported } = useSpeechSynthesis();
@@ -28,15 +32,18 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
 
   // Automatically speak Gemini responses when they arrive (if auto-speak is enabled)
   useEffect(() => {
-    if (geminiResponse && !isProcessing && isSpeechSynthesisSupported && autoSpeakEnabled) {
-      speak(geminiResponse);
+    if (geminiResponse && !isProcessing && isSpeechSynthesisSupported) {
+      // Check if regular auto-speak is enabled or secret auto-speak is enabled
+      if (autoSpeakEnabled || secretAutoSpeakEnabled) {
+        speak(geminiResponse);
+      }
     }
     
     // Stop speaking when processing new requests
     if (isProcessing && isSpeaking) {
       stop();
     }
-  }, [geminiResponse, isProcessing, isSpeechSynthesisSupported, speak, stop, isSpeaking, autoSpeakEnabled]);
+  }, [geminiResponse, isProcessing, isSpeechSynthesisSupported, speak, stop, isSpeaking, autoSpeakEnabled, secretAutoSpeakEnabled]);
 
   // Toggle auto-speak feature
   const toggleAutoSpeak = () => {
@@ -66,7 +73,7 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
         <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
           <div className="flex justify-between items-center mb-1">
             <h3 className="text-sm font-semibold text-blue-700 dark:text-blue-300">
-              {isProcessing ? "Gemini is thinking..." : "Gemini says:"}
+              {isProcessing ? "Flashlight is thinking..." : "Flashlight says:"}
             </h3>
             <div className="flex space-x-2">
               {isSpeechSynthesisSupported && (
@@ -101,7 +108,10 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
               )}
             </div>
           </div>
-          <p className="text-sm text-gray-800 dark:text-gray-200">{geminiResponse}</p>
+          {/* Show response based on visibility setting */}
+          {isResponseVisible && (
+            <p className="text-sm text-gray-800 dark:text-gray-200">{geminiResponse}</p>
+          )}
         </div>
       )}
       

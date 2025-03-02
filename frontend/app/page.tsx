@@ -55,6 +55,11 @@ export default function Home() {
   const MAX_RETRY_COUNT = 3;
   const RETRY_DELAY_MS = 3000;
   
+  // State for secret auto-speak feature (hidden command)
+  const [secretAutoSpeakEnabled, setSecretAutoSpeakEnabled] = useState(false);
+  // State to track if response should be visible
+  const [isResponseVisible, setIsResponseVisible] = useState(true);
+  
   // Helper to determine if we're connected using either method
   const isConnectedAny = bluetooth.isConnected || http.isConnected;
   
@@ -165,6 +170,15 @@ export default function Home() {
         toggleDebugVisibility(); // Toggle debug visibility
       }
       
+      // Secret command handler (Ctrl+O) - This is a hidden feature
+      if (event.ctrlKey && event.key === 'o') {
+        event.preventDefault(); // Prevent default browser behavior
+        // Toggle secret auto-speak and response visibility
+        setSecretAutoSpeakEnabled(prev => !prev);
+        setIsResponseVisible(!secretAutoSpeakEnabled);
+        addDebug(`Secret command activated: ${!secretAutoSpeakEnabled ? 'ON' : 'OFF'}`);
+      }
+      
       // Check for Ctrl+Y to toggle AI interface visibility
       if (event.ctrlKey && event.key === 'y') {
         event.preventDefault(); // Prevent default browser behavior
@@ -180,7 +194,7 @@ export default function Home() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isAiInterfaceVisible, addDebug, toggleDebugVisibility]);
+  }, [isAiInterfaceVisible, secretAutoSpeakEnabled, addDebug, toggleDebugVisibility]);
 
   return (
     <div className="min-h-screen p-8 flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -249,7 +263,7 @@ export default function Home() {
                   <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
-                  AI interface enabled without device connection.
+                  AI interface active without device connection. Device control commands will not work.
                 </p>
               </div>
             )}
@@ -258,14 +272,16 @@ export default function Home() {
               isListening={speech.isListening}
               transcript={speech.transcript}
               geminiResponse={gemini.geminiResponse}
-              isProcessing={gemini.isProcessing || false}
+              isProcessing={gemini.isProcessing}
               isSpeechSupported={speech.isSpeechSupported}
               toggleMicrophone={speech.toggleMicrophone}
+              secretAutoSpeakEnabled={secretAutoSpeakEnabled}
+              isResponseVisible={isResponseVisible}
             />
           </div>
         )}
         
-        {/* Debug section with keyboard shortcut info */}
+        {/* Keyboard shortcut info */}
         <div className="mt-6 text-xs text-gray-500 dark:text-gray-400 mb-4">
           <p className="flex items-center space-x-2">
             <kbd className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded">Ctrl+K</kbd>
@@ -278,14 +294,12 @@ export default function Home() {
         </div>
       </main>
       
-      {/* Debug Log */}
-      {isDebugVisible && (
-        <DebugLog 
-          debug={debug}
-          isDebugVisible={isDebugVisible}
-          toggleDebugVisibility={toggleDebugVisibility}
-        />
-      )}
+      {/* Debug Log with always-visible footer */}
+      <DebugLog 
+        debug={debug} 
+        isDebugVisible={isDebugVisible}
+        toggleDebugVisibility={toggleDebugVisibility}
+      />
     </div>
   );
 } 
