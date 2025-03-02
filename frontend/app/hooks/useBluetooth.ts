@@ -28,6 +28,9 @@ export const useBluetooth = (deviceNamePrefix: string): BluetoothState & Bluetoo
   const txCharacteristicRef = useRef<BluetoothRemoteGATTCharacteristic | null>(null);
   const rxCharacteristicRef = useRef<BluetoothRemoteGATTCharacteristic | null>(null);
   
+  // Interval reference for status polling
+  const statusIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
   // Get debug functionality
   const { addDebug } = useDebug();
 
@@ -47,6 +50,13 @@ export const useBluetooth = (deviceNamePrefix: string): BluetoothState & Bluetoo
         } catch (e) {
           console.error('Error during cleanup:', e);
         }
+      }
+
+      // Also clear any active status check interval
+      if (statusIntervalRef.current) {
+        addDebug('Component unmounting, clearing status polling interval');
+        clearInterval(statusIntervalRef.current);
+        statusIntervalRef.current = null;
       }
     };
   }, [gattServer, addDebug]);
@@ -187,6 +197,46 @@ export const useBluetooth = (deviceNamePrefix: string): BluetoothState & Bluetoo
       addDebug(`Error requesting flashlight status: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
+
+  // Setup polling for flashlight status when connected
+  useEffect(() => {
+    // Start polling when connected
+    if (isConnected && gattServer && gattServer.connected) {
+      addDebug('Starting flashlight status polling');
+      
+      // Clear any existing interval first
+      if (statusIntervalRef.current) {
+        clearInterval(statusIntervalRef.current);
+        statusIntervalRef.current = null;
+      }
+      
+      // Set up new interval
+      statusIntervalRef.current = setInterval(() => {
+        // Check if still connected before requesting status
+        if (gattServer && gattServer.connected && rxCharacteristicRef.current) {
+          addDebug('Polling: checking flashlight status');
+          requestFlashlightStatus();
+        } else {
+          addDebug('Polling: detected disconnection, updating UI');
+          setIsConnected(false);
+          // Clear the interval since we're disconnected
+          if (statusIntervalRef.current) {
+            clearInterval(statusIntervalRef.current);
+            statusIntervalRef.current = null;
+          }
+        }
+      }, 3000); // Poll every 3 seconds
+    }
+    
+    // Cleanup function to clear the interval
+    return () => {
+      if (statusIntervalRef.current) {
+        addDebug('Stopping flashlight status polling');
+        clearInterval(statusIntervalRef.current);
+        statusIntervalRef.current = null;
+      }
+    };
+  }, [isConnected, gattServer, addDebug]);
 
   // Function to connect to BLE device
   const connectToDevice = async (): Promise<void> => {
