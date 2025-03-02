@@ -14,7 +14,7 @@ import {
   useGemini, 
   useDebug 
 } from "./hooks";
-import { DEFAULT_DEVICE_NAME_PREFIX } from "./constants";
+import { DEFAULT_DEVICE_NAME_PREFIX, DEFAULT_SYSTEM_PROMPT } from "./constants";
 
 export default function Home() {
   // Get environment variables
@@ -22,6 +22,7 @@ export default function Home() {
   const deviceNamePrefix = process.env.NEXT_PUBLIC_DEVICE_NAME_PREFIX || DEFAULT_DEVICE_NAME_PREFIX;
   const geminiApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
   const geminiModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || 'gemini-1.5-pro';
+  const systemPrompt = process.env.NEXT_PUBLIC_GEMINI_SYSTEM_PROMPT || DEFAULT_SYSTEM_PROMPT;
   
   // Initialize debug hook
   const { debug, isDebugVisible, addDebug, toggleDebugVisibility } = useDebug();
@@ -32,19 +33,17 @@ export default function Home() {
   // Initialize Gemini hook
   const gemini = useGemini({
     apiKey: geminiApiKey,
-    model: geminiModel
+    model: geminiModel,
+    systemPrompt: systemPrompt
   });
   
   // Initialize Speech hook with callback to send to Gemini
   const speech = useSpeech(gemini.sendToGemini);
   
-  // State for toggling auto-clear transcript
-  const [autoClearTranscript, setAutoClearTranscript] = useState(false);
-  
   // State for controlling AI interface visibility regardless of connection status
   const [isAiInterfaceVisible, setIsAiInterfaceVisible] = useState(false);
   
-  // Add keyboard event listeners for debug toggle (Ctrl+K), autoclear toggle (Ctrl+L), and AI interface toggle (Ctrl+Y)
+  // Add keyboard event listeners for debug toggle (Ctrl+K) and AI interface toggle (Ctrl+Y)
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // Check for Ctrl+K to toggle debug
@@ -53,12 +52,7 @@ export default function Home() {
         toggleDebugVisibility(); // Toggle debug visibility
       }
       
-      // Check for Ctrl+L to toggle autoclear behavior
-      if (event.ctrlKey && event.key === 'l') {
-        event.preventDefault(); // Prevent default browser behavior
-        setAutoClearTranscript(prev => !prev); // Toggle autoclear setting
-        addDebug(`Toggled auto-clear transcript: ${!autoClearTranscript ? 'ON' : 'OFF'}`);
-      }
+      // Removed Ctrl+L keyboard shortcut for toggling autoclear behavior
       
       // Check for Ctrl+Y to toggle AI interface visibility
       if (event.ctrlKey && event.key === 'y') {
@@ -75,7 +69,7 @@ export default function Home() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [autoClearTranscript, isAiInterfaceVisible, addDebug, toggleDebugVisibility]);
+  }, [isAiInterfaceVisible, addDebug, toggleDebugVisibility]);
 
   return (
     <div className="min-h-screen p-8 flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -124,7 +118,6 @@ export default function Home() {
               transcript={speech.transcript}
               geminiResponse={gemini.geminiResponse}
               isProcessing={gemini.isProcessing}
-              autoClearTranscript={autoClearTranscript}
               isSpeechSupported={speech.isSpeechSupported}
               toggleMicrophone={speech.toggleMicrophone}
             />
@@ -148,8 +141,6 @@ export default function Home() {
           debug={debug}
           isDebugVisible={isDebugVisible}
           toggleDebugVisibility={toggleDebugVisibility}
-          autoClearTranscript={autoClearTranscript}
-          toggleAutoClearTranscript={() => setAutoClearTranscript(prev => !prev)}
         />
       </main>
     </div>

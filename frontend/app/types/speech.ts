@@ -3,7 +3,6 @@ export interface SpeechState {
   isListening: boolean;
   transcript: string;
   isSpeechSupported: boolean;
-  autoClearTranscript: boolean;
 }
 
 export interface SpeechServices {

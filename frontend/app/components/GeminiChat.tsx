@@ -7,7 +7,6 @@ interface GeminiChatProps {
   transcript: string;
   geminiResponse: string;
   isProcessing: boolean;
-  autoClearTranscript: boolean;
   isSpeechSupported: boolean;
   toggleMicrophone: () => Promise<void>;
 }
@@ -17,21 +16,11 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
   transcript,
   geminiResponse,
   isProcessing,
-  autoClearTranscript,
   isSpeechSupported,
   toggleMicrophone
 }) => {
   return (
     <div className="mb-6">
-      {/* Settings indicator */}
-      <div className="mb-3 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-        <div className="flex items-center space-x-2">
-          <span className={`inline-block w-2 h-2 rounded-full ${autoClearTranscript ? 'bg-green-500' : 'bg-gray-400'}`}></span>
-          <span>Auto-clear on pause {autoClearTranscript ? 'ON' : 'OFF'}</span>
-        </div>
-        <span className="text-xs">(Ctrl+L to toggle)</span>
-      </div>
-      
       {/* Live transcript with typing indicator if listening */}
       <div className="mb-4 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
         <h3 className="text-sm font-semibold mb-1">
