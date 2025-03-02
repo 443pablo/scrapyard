@@ -79,4 +79,4 @@ export const GeminiChat: React.FC<GeminiChatProps> = ({
       </button>
     </div>
   );
-}; 
+};

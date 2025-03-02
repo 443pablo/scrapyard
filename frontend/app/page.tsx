@@ -69,14 +69,6 @@ export default function Home() {
       
       addDebug(`Auto-connecting to WebSocket at ${wsAddress} (IP from Bluetooth)`);
       websocket.connectToWebSocket(wsAddress);
-    } else if (bluetooth.isConnected && 
-               !websocket.isConnected && 
-               !websocket.isConnecting && 
-               (!bluetooth.wifiStatus?.connected || !bluetooth.wifiStatus?.ip)) {
-      
-      // If WiFi status isn't available yet, request it
-      addDebug('Waiting for WiFi status from Bluetooth before connecting to WebSocket');
-      bluetooth.requestWifiStatus();
     }
   }, [
     bluetooth.isConnected, 
@@ -84,8 +76,7 @@ export default function Home() {
     websocket.isConnected, 
     websocket.isConnecting, 
     addDebug, 
-    websocket,
-    bluetooth
+    websocket
   ]);
   
   // Hook to handle Gemini responses for controlling the flashlight
@@ -204,9 +195,7 @@ export default function Home() {
                   ? `Connected to ${websocket.ipAddress}` 
                   : websocket.isConnecting 
                     ? 'Connecting...' 
-                    : bluetooth.wifiStatus?.connected
-                      ? 'Waiting to connect...'
-                      : 'Waiting for WiFi info...'}
+                    : 'Waiting for WiFi info...'}
               </span>
             </div>
           </div>

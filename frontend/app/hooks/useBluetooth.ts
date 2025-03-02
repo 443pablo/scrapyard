@@ -145,22 +145,6 @@ export const useBluetooth = (deviceNamePrefix: string): BluetoothState & Bluetoo
     }
   };
 
-  // Function to request WiFi status (primary Bluetooth function)
-  const requestWifiStatus = async (): Promise<void> => {
-    try {
-      if (!rxCharacteristicRef.current) {
-        addDebug("Cannot request WiFi status - RX characteristic not available yet");
-        return;
-      }
-      
-      addDebug('Requesting WiFi status via Bluetooth...');
-      const success = await sendCommand('wifi_status');
-      addDebug(`WiFi status request sent: ${success}`);
-    } catch (e) {
-      addDebug(`Error requesting WiFi status: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  };
-
   // Function to connect to BLE device
   const connectToDevice = async (): Promise<void> => {
     try {
@@ -290,8 +274,9 @@ export const useBluetooth = (deviceNamePrefix: string): BluetoothState & Bluetoo
             // Wait for connection to stabilize
             await new Promise(resolve => setTimeout(resolve, 500));
             
-            // Request WiFi status after connecting
-            requestWifiStatus();
+            // Automatically send wifi_status command after connecting
+            addDebug('Automatically requesting WiFi status...');
+            sendCommand('wifi_status');
             
             setSuccessMessage('Connected and ready!');
           } else {
@@ -330,7 +315,6 @@ export const useBluetooth = (deviceNamePrefix: string): BluetoothState & Bluetoo
     // Methods
     connectToDevice,
     sendCommand,
-    toggleFlashlight,
-    requestWifiStatus
+    toggleFlashlight
   };
 }; 
