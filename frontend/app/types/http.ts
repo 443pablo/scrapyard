@@ -15,6 +15,7 @@ export interface HttpServices {
   toggleSmartlight: () => Promise<void>;
   turnOnSmartlight: () => Promise<void>;
   turnOffSmartlight: () => Promise<void>;
+  disableSmartlight: () => Promise<void>;
   blinkSmartlight: (intervalMs: number) => Promise<void>;
   getSmartlightStatus: () => Promise<void>;
 }

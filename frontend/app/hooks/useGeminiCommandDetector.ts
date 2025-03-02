@@ -12,7 +12,7 @@ interface GeminiCommand {
 
 export const useGeminiCommandDetector = (
   geminiResponse: string,
-  httpServices: Pick<HttpServices, 'turnOnSmartlight' | 'turnOffSmartlight' | 'blinkSmartlight' | 'connectToDevice'>,
+  httpServices: Pick<HttpServices, 'turnOnSmartlight' | 'disableSmartlight' | 'turnOffSmartlight' | 'blinkSmartlight' | 'connectToDevice'>,
   isHttpConnected: boolean
 ) => {
   const { addDebug } = useDebug();
@@ -64,6 +64,9 @@ export const useGeminiCommandDetector = (
               } else if (parsedCommand.command === 'off') {
                 addDebug('Detected command: OFF - Turning flashlight off');
                 await httpServices.turnOffSmartlight();
+              } else if (parsedCommand.command === 'disabled') {
+                addDebug('Detected command: DISABLED - Turning flashlight off');
+                await httpServices.disableSmartlight();
               }
             }
             

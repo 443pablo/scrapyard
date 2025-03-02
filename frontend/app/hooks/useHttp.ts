@@ -128,6 +128,14 @@ export const useHttp = (): HttpState & HttpServices => {
     }
   }, [makeRequest, addDebug]);
 
+  const disableSmartlight = useCallback(async (): Promise<void> => {
+    const response = await makeRequest<HttpResponse>("/disable");
+
+    if (response && response.flashlight !== undefined) {
+      addDebug(`Disabled flashlight`);
+    }
+  }, [makeRequest, addDebug]);
+
   // Function to turn off the flashlight
   const turnOffSmartlight = useCallback(async (): Promise<void> => {
     const response = await makeRequest<HttpResponse>("/off");
@@ -179,6 +187,7 @@ export const useHttp = (): HttpState & HttpServices => {
     disconnectDevice,
     toggleSmartlight,
     turnOnSmartlight,
+    disableSmartlight,
     turnOffSmartlight,
     blinkSmartlight,
     getSmartlightStatus,
