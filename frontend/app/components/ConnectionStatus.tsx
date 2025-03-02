@@ -69,7 +69,7 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
           disabled={isConnecting || !isBluetoothSupported}
           className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
         >
-          {isConnecting ? 'Connecting...' : 'Connect to Device'}
+          {isConnecting ? 'Pairing...' : 'Pair Flashlight'}
         </button>
       )}
     </>
