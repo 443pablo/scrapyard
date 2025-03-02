@@ -55,9 +55,6 @@ export default function Home() {
   const MAX_RETRY_COUNT = 3;
   const RETRY_DELAY_MS = 3000;
   
-  // State for response visibility (always visible)
-  const isResponseVisible = true;
-  
   // Track processed responses to prevent duplicates
   const processedResponseRef = useRef<string | null>(null);
   
@@ -275,22 +272,9 @@ export default function Home() {
               isProcessing={gemini.isProcessing}
               isSpeechSupported={speech.isSpeechSupported}
               toggleMicrophone={speech.toggleMicrophone}
-              isResponseVisible={isResponseVisible}
             />
           </div>
         )}
-        
-        {/* Keyboard shortcut info */}
-        <div className="mt-6 text-xs text-gray-500 dark:text-gray-400 mb-4">
-          <p className="flex items-center space-x-2">
-            <kbd className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded">Ctrl+K</kbd>
-            <span>Toggle debug panel</span>
-          </p>
-          <p className="flex items-center space-x-2 mt-1">
-            <kbd className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded">Ctrl+Y</kbd>
-            <span>Toggle AI interface visibility</span>
-          </p>
-        </div>
       </main>
       
       {/* Debug Log with always-visible footer */}
