@@ -202,13 +202,34 @@ export default function Home() {
   // Function to send commands to the ESP32 via BLE
   const sendCommand = async (command: string, params?: Record<string, unknown>) => {
     try {
+      // Check GATT server directly instead of isConnected state
+      if (!gattServer) {
+        const errorMsg = "No GATT server connection. Please connect first.";
+        addDebug(errorMsg);
+        setError(errorMsg);
+        return false;
+      }
+      
+      // Check if the GATT server is actually connected
+      if (!gattServer.connected) {
+        const errorMsg = "BLE connection lost. Please reconnect.";
+        addDebug(errorMsg);
+        setError(errorMsg);
+        setIsConnected(false);  // Update UI state to reflect disconnection
+        return false;
+      }
+      
+      // Check RX characteristic reference directly
       if (!rxCharacteristicRef.current) {
-        throw new Error("BLE not connected or RX characteristic not available");
+        const errorMsg = "RX characteristic not available. Try reconnecting.";
+        addDebug(errorMsg);
+        setError(errorMsg);
+        return false;
       }
       
       const commandObj = {
         command,
-        ...params
+        ...(params || {})
       };
       
       const commandString = JSON.stringify(commandObj);
@@ -218,10 +239,23 @@ export default function Home() {
       const encoder = new TextEncoder();
       const data = encoder.encode(commandString);
       
-      // Send the command via BLE
-      await rxCharacteristicRef.current.writeValue(data);
+      addDebug(`Encoded command length: ${data.length} bytes`);
       
-      return true;
+      // Check if data exceeds BLE packet size (typically ~20 bytes)
+      if (data.length > 20) {
+        addDebug(`Warning: Command exceeds typical BLE packet size (${data.length} bytes)`);
+      }
+      
+      // Send the command via BLE
+      try {
+        await rxCharacteristicRef.current.writeValue(data);
+        addDebug(`Command sent successfully via BLE`);
+        return true;
+      } catch (writeError) {
+        const errorMsg = `BLE write error: ${writeError instanceof Error ? writeError.message : String(writeError)}`;
+        addDebug(errorMsg);
+        throw new Error(errorMsg);
+      }
     } catch (error) {
       console.error('Error sending command:', error);
       setError(`Failed to send command: ${error instanceof Error ? error.message : String(error)}`);
@@ -233,16 +267,36 @@ export default function Home() {
   const toggleFlashlight = async () => {
     try {
       addDebug('Sending toggle_flashlight command...');
+      addDebug(`Current UI flashlight state: ${flashlightStatus.on ? 'ON' : 'OFF'}`);
+      
+      // Direct check for characteristics instead of relying on state variables
+      if (!rxCharacteristicRef.current) {
+        const errorMsg = "RX characteristic isn't ready yet. Please try again in a moment.";
+        addDebug(errorMsg);
+        setError(errorMsg);
+        return;
+      }
+      
+      // Add more debugging to see the command object
+      const commandObj = {
+        command: 'toggle_flashlight'
+      };
+      addDebug(`Command object: ${JSON.stringify(commandObj)}`);
+      
       const success = await sendCommand('toggle_flashlight');
+      
+      addDebug(`Command sent successfully: ${success}`);
       
       if (success) {
         // We'll let the notification handler update the actual state
         // after receiving confirmation from the device
         setSuccessMessage('Flashlight toggle command sent');
+        addDebug(`Waiting for device response with updated flashlight state...`);
       }
     } catch (error) {
       console.error('Error toggling flashlight:', error);
       setError(`Failed to toggle flashlight: ${error instanceof Error ? error.message : String(error)}`);
+      addDebug(`Error in toggleFlashlight: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
@@ -267,7 +321,9 @@ export default function Home() {
       setError(null);
       setDebug([]);
       
-      addDebug('Requesting Bluetooth device...');
+      addDebug('Starting Bluetooth connection process...');
+      addDebug(`Looking for devices with namePrefix: ${deviceNamePrefix}`);
+      addDebug(`Using UART Service UUID: ${UART_SERVICE_UUID}`);
       
       // Request the device with the exact UART service UUID
       try {
@@ -282,16 +338,25 @@ export default function Home() {
         setDevice(bluetoothDevice);
         
         addDebug(`Device selected: ${bluetoothDevice.name || 'unnamed device'}`);
+        addDebug(`Device ID: ${bluetoothDevice.id}`);
         
         // Immediately try to connect to the GATT server
         addDebug('Connecting to GATT server...');
-        const server = await bluetoothDevice.gatt?.connect();
+        
+        if (!bluetoothDevice.gatt) {
+          throw new Error('Device does not have GATT server');
+        }
+        
+        const server = await bluetoothDevice.gatt.connect();
         
         if (!server) {
           throw new Error('Failed to connect to GATT server');
         }
         
         setGattServer(server);
+        addDebug(`GATT server connected: ${server.connected}`);
+        
+        // Update connection state before continuing
         setIsConnected(true);
         
         // Now try to get the UART service
@@ -301,14 +366,18 @@ export default function Home() {
           addDebug('UART service found!');
           
           // Test getting the TX and RX characteristics to make sure they exist
+          addDebug(`Looking for RX characteristic: ${UART_RX_CHARACTERISTIC_UUID}`);
           const rxChar = await uartService.getCharacteristic(UART_RX_CHARACTERISTIC_UUID);
           addDebug(`RX characteristic found: ${rxChar.uuid}`);
+          addDebug(`RX properties: write=${rxChar.properties.write}, writeWithoutResponse=${rxChar.properties.writeWithoutResponse}`);
           
           // Store the RX characteristic for later use
           rxCharacteristicRef.current = rxChar;
           
+          addDebug(`Looking for TX characteristic: ${UART_TX_CHARACTERISTIC_UUID}`);
           const txChar = await uartService.getCharacteristic(UART_TX_CHARACTERISTIC_UUID);
           addDebug(`TX characteristic found: ${txChar.uuid}`);
+          addDebug(`TX properties: notify=${txChar.properties.notify}, indicate=${txChar.properties.indicate}`);
           
           // Store the TX characteristic for later use
           txCharacteristicRef.current = txChar;
@@ -340,6 +409,11 @@ export default function Home() {
                     });
                     
                     addDebug(`Flashlight state updated: ${responseData.flashlight ? 'ON' : 'OFF'}`);
+                  }
+                  
+                  // Display additional log information if available
+                  if (responseData.log) {
+                    addDebug(`DEVICE LOG: ${responseData.log}`);
                   }
                   
                   if (responseData.ip) {
@@ -376,15 +450,12 @@ export default function Home() {
               }
             });
             
+            // Add a small delay to ensure connection is stable before requesting status
+            addDebug('Waiting for connection to stabilize...');
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
             // Request the current flashlight status after connecting
-            setTimeout(async () => {
-              try {
-                await sendCommand('flashlight_status');
-                addDebug('Requested flashlight status');
-              } catch (e) {
-                addDebug(`Error requesting flashlight status: ${e}`);
-              }
-            }, 500);
+            requestFlashlightStatus();
             
             setSuccessMessage('Connected and ready!');
           } else {
@@ -578,6 +649,23 @@ export default function Home() {
     }
   };
 
+  // Function to request flashlight status
+  const requestFlashlightStatus = async () => {
+    try {
+      // Check if we're ready to send commands
+      if (!rxCharacteristicRef.current) {
+        addDebug("Cannot request flashlight status - RX characteristic not available yet");
+        return;
+      }
+      
+      addDebug('Requesting flashlight status...');
+      const success = await sendCommand('flashlight_status');
+      addDebug(`Flashlight status request sent: ${success}`);
+    } catch (e) {
+      addDebug(`Error requesting flashlight status: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
   return (
     <div className="min-h-screen p-8 flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900">
       <main className="w-full max-w-md p-6 bg-white dark:bg-gray-800 rounded-xl shadow-md">
@@ -609,6 +697,13 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
                 <span className="font-medium">Connected to {device?.name || 'device'}</span>
+                <button 
+                  onClick={() => connectToDevice()} 
+                  className="ml-2 text-xs text-blue-600 hover:underline"
+                  title="Try to reconnect if the connection seems broken"
+                >
+                  Reconnect
+                </button>
               </div>
               {successMessage && <p className="mt-2">{successMessage}</p>}
             </div>
