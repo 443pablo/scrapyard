@@ -2,6 +2,8 @@
 
 An overengineered flashlight app created at Hack Club's Scrapyard event (March 2025). Because why should a flashlight just... turn on and off?
 
+[Demo video](https://hc-cdn.hel1.your-objectstorage.com/s/v3/15f5b4b25a5c45620df0706f1ad6ac393ba13818_img_3034.mp4)
+
 ## ✨ Features
 
 - 📱 Web-based control interface built with Next.js
