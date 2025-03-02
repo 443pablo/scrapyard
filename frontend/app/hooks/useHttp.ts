@@ -129,6 +129,7 @@ export const useHttp = (): HttpState & HttpServices => {
   }, [makeRequest, addDebug]);
 
   const disableSmartlight = useCallback(async (): Promise<void> => {
+    console.log("CHECKPOINT DISABLED??")
     const response = await makeRequest<HttpResponse>("/disable");
 
     if (response && response.flashlight !== undefined) {
@@ -183,11 +184,11 @@ export const useHttp = (): HttpState & HttpServices => {
     error,
     flashlightStatus,
     ipAddress,
+    disableSmartlight,
     connectToDevice,
     disconnectDevice,
     toggleSmartlight,
     turnOnSmartlight,
-    disableSmartlight,
     turnOffSmartlight,
     blinkSmartlight,
     getSmartlightStatus,

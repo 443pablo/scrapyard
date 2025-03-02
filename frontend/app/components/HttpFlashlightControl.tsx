@@ -8,6 +8,7 @@ interface HttpSmartlightControlProps {
   toggleSmartlight: () => Promise<void>;
   turnOnSmartlight: () => Promise<void>;
   turnOffSmartlight: () => Promise<void>;
+  disableSmartlight: () => Promise<void>;
   blinkSmartlight: (intervalMs: number) => Promise<void>;
 }
 
@@ -16,6 +17,7 @@ export const HttpSmartlightControl: React.FC<HttpSmartlightControlProps> = ({
   toggleSmartlight,
   turnOnSmartlight,
   turnOffSmartlight,
+  disableSmartlight,
   blinkSmartlight,
 }) => {
   const [blinkInterval, setBlinkInterval] = useState('1000');

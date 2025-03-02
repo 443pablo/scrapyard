@@ -67,6 +67,9 @@ export const useGeminiCommandDetector = (
               } else if (parsedCommand.command === 'disabled') {
                 addDebug('Detected command: DISABLED - Turning flashlight off');
                 await httpServices.disableSmartlight();
+              } else if (parsedCommand.command === 'disable') {
+                addDebug('Detected command: DISABLED - Turning flashlight off');
+                await httpServices.disableSmartlight();
               }
             }
             

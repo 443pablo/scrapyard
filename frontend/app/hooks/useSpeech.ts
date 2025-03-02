@@ -43,6 +43,7 @@ export const useSpeech = (
         recognition.interimResults = true; // Enable interim results for real-time updates
         
         recognition.onresult = async (event: SpeechRecognitionResultEvent) => {
+          //console.log("RECOGNITION DONE")
           // Get the latest result
           const current = event.results.length - 1;
           const speechResult = event.results[current][0].transcript;
@@ -52,8 +53,11 @@ export const useSpeech = (
           
           // Store final results
           if (event.results[current].isFinal) {
+
+            // MAKE THIS TRIGGER TO GEMINI
+
             addDebug(`Final speech recognized: ${speechResult}`);
-            
+            onFinalTranscript(speechResult);
             // Save the latest final transcript
             lastTranscriptRef.current = speechResult;
           }
@@ -117,7 +121,7 @@ export const useSpeech = (
     // Process the transcript when button is released
     if (transcript.trim()) {
       addDebug(`Processing transcript on button release: ${transcript}`);
-      await onFinalTranscript(transcript);
+      //await onFinalTranscript(transcript);
     }
   };
 
@@ -129,10 +133,10 @@ export const useSpeech = (
       stopListening();
       
       // Only send if there's an actual transcript to send
-      if (transcript.trim()) {
+      //if (transcript.trim()) {
         addDebug(`Processing transcript on stop: ${transcript}`);
         await onFinalTranscript(transcript);
-      }
+      //}
     }
   };
 

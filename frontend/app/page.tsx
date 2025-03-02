@@ -27,7 +27,7 @@ export default function Home() {
   const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Device Setup';
   const deviceNamePrefix = process.env.NEXT_PUBLIC_DEVICE_NAME_PREFIX || DEFAULT_DEVICE_NAME_PREFIX;
   const geminiApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
-  const geminiModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || 'gemini-1.5-pro';
+  const geminiModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || 'gemini-1.5';
   const systemPrompt = process.env.NEXT_PUBLIC_GEMINI_SYSTEM_PROMPT || DEFAULT_SYSTEM_PROMPT;
   
   // Initialize debug hook
@@ -56,6 +56,7 @@ export default function Home() {
       turnOnSmartlight: http.turnOnSmartlight,
       turnOffSmartlight: http.turnOffSmartlight,
       blinkSmartlight: http.blinkSmartlight,
+      disableSmartlight: http.disableSmartlight,
       connectToDevice: http.connectToDevice
     },
     http.isConnected
@@ -194,6 +195,7 @@ export default function Home() {
             toggleSmartlight={http.toggleSmartlight}
             turnOnSmartlight={http.turnOnSmartlight}
             turnOffSmartlight={http.turnOffSmartlight}
+            disableSmartlight={http.disableSmartlight}
             blinkSmartlight={http.blinkSmartlight}
           />
         )}
