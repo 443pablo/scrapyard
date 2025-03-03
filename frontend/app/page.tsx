@@ -5,14 +5,16 @@ import {
   ConnectionStatus, 
   GeminiChat, 
   DebugLog,
-  HttpFlashlightControl
+  HttpSmartlightControl,
+  GeminiResponseDisplay
 } from "./components";
 import { 
   useBluetooth, 
   useSpeech, 
   useGemini, 
   useDebug,
-  useHttp
+  useHttp,
+  useGeminiCommandDetector
 } from "./hooks";
 import { 
   DEFAULT_DEVICE_NAME_PREFIX, 
@@ -25,7 +27,7 @@ export default function Home() {
   const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Device Setup';
   const deviceNamePrefix = process.env.NEXT_PUBLIC_DEVICE_NAME_PREFIX || DEFAULT_DEVICE_NAME_PREFIX;
   const geminiApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
-  const geminiModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || 'gemini-1.5-pro';
+  const geminiModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || 'gemini-1.5';
   const systemPrompt = process.env.NEXT_PUBLIC_GEMINI_SYSTEM_PROMPT || DEFAULT_SYSTEM_PROMPT;
   
   // Initialize debug hook
@@ -47,6 +49,19 @@ export default function Home() {
   // Initialize Speech hook with callback to send to Gemini
   const speech = useSpeech(gemini.sendToGemini);
   
+  // Add command detector hook to process Gemini responses for commands
+  useGeminiCommandDetector(
+    gemini.geminiResponse,
+    {
+      turnOnSmartlight: http.turnOnSmartlight,
+      turnOffSmartlight: http.turnOffSmartlight,
+      blinkSmartlight: http.blinkSmartlight,
+      disableSmartlight: http.disableSmartlight,
+      connectToDevice: http.connectToDevice
+    },
+    http.isConnected
+  );
+  
   // State for controlling AI interface visibility regardless of connection status
   const [isAiInterfaceVisible, setIsAiInterfaceVisible] = useState(false);
   
@@ -55,12 +70,6 @@ export default function Home() {
   const MAX_RETRY_COUNT = 3;
   const RETRY_DELAY_MS = 3000;
   
-  // Track processed responses to prevent duplicates
-  const processedResponseRef = useRef<string | null>(null);
-  
-  // Helper to determine if we're connected using either method
-  const isConnectedAny = bluetooth.isConnected || http.isConnected;
-  
   // Function to attempt HTTP connection
   const attemptHttpConnection = useCallback(() => {
     if (bluetooth.isConnected && 
@@ -68,9 +77,9 @@ export default function Home() {
         !http.isConnecting) {
       
       // Use a default IP or get it from environment
-      const deviceIp = process.env.NEXT_PUBLIC_DEVICE_IP || '10.10.16.80';
+      const deviceIp = process.env.NEXT_PUBLIC_DEVICE_IP || '192.168.137.224';
       // Format with port if needed
-      const httpAddress = HTTP_PORT !== 80 ? `${deviceIp}:${HTTP_PORT}` : deviceIp;
+      const httpAddress = HTTP_PORT ? `${deviceIp}:${HTTP_PORT}` : deviceIp;
       
       addDebug(`Connecting to HTTP at ${httpAddress} (Attempt ${httpRetryCount + 1}/${MAX_RETRY_COUNT})`);
       http.connectToDevice(httpAddress);
@@ -106,67 +115,6 @@ export default function Home() {
     }
   }, [http.error, http.isConnected, http.isConnecting, httpRetryCount, MAX_RETRY_COUNT, addDebug, attemptHttpConnection]);
   
-  // Hook to handle Gemini responses for controlling the flashlight
-  useEffect(() => {
-    if (!gemini.geminiResponse) return;
-    
-    // Check if we've already processed this exact response
-    if (processedResponseRef.current === gemini.geminiResponse) {
-      return;
-    }
-    
-    // Mark this response as processed
-    processedResponseRef.current = gemini.geminiResponse;
-    
-    try {
-      // Check if there's a JSON command in the response
-      const commandMatch = gemini.geminiResponse.match(/\{.*"command".*\}/);
-      const blinkMatch = gemini.geminiResponse.match(/\{.*"blink".*\}/);
-      
-      if (commandMatch) {
-        const commandData = JSON.parse(commandMatch[0]);
-        
-        if (commandData.command === "on") {
-          addDebug("AI requested to turn flashlight ON");
-          
-          // Use HTTP for flashlight control if connected
-          if (http.isConnected) {
-            http.turnOnFlashlight();
-          } else {
-            addDebug("Cannot turn on flashlight: HTTP not connected");
-          }
-        } 
-        else if (commandData.command === "off") {
-          addDebug("AI requested to turn flashlight OFF");
-          
-          // Use HTTP for flashlight control if connected
-          if (http.isConnected) {
-            http.turnOffFlashlight();
-          } else {
-            addDebug("Cannot turn off flashlight: HTTP not connected");
-          }
-        }
-      }
-      
-      if (blinkMatch) {
-        const blinkData = JSON.parse(blinkMatch[0]);
-        const blinkInterval = parseInt(blinkData.blink);
-        
-        if (!isNaN(blinkInterval)) {
-          addDebug(`AI requested to blink flashlight every ${blinkInterval}ms`);
-          
-          if (http.isConnected) {
-            http.blinkFlashlight(blinkInterval);
-          } else {
-            addDebug("Cannot blink flashlight: HTTP not connected");
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Error parsing AI command:", e);
-    }
-  }, [gemini.geminiResponse, http, addDebug]);
-  
   // Add keyboard event listeners for debug toggle (Ctrl+K) and AI interface toggle (Ctrl+Y)
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -194,11 +142,11 @@ export default function Home() {
   }, [isAiInterfaceVisible, addDebug, toggleDebugVisibility]);
 
   return (
-    <div className="min-h-screen p-8 flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900">
-      <main className="w-full max-w-md p-6 bg-white dark:bg-gray-800 rounded-xl shadow-md">
+    <div className="min-h-screen p-8 flex flex-col items-center justify-center">
+      <main className="w-full max-w-md p-6 bg-white rounded-xl shadow-md">
         <div className="flex flex-col items-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{appName}</h1>
-          <p className="text-sm text-gray-600 dark:text-gray-300 text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">{appName}</h1>
+          <p className="text-sm text-gray-600 text-center">
             Connect to your next-generation flashlight and interact with it using your voice.
           </p>
         </div>
@@ -233,7 +181,7 @@ export default function Home() {
                   : 'Connection failed'}
             </span>
             {httpRetryCount > 0 && !http.isConnected && (
-              <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">
+              <span className="ml-2 text-xs text-amber-600">
                 (Retry {httpRetryCount}/{MAX_RETRY_COUNT})
               </span>
             )}
@@ -242,36 +190,33 @@ export default function Home() {
 
         {/* Show HTTP flashlight controls when HTTP is connected */}
         {http.isConnected && (
-          <HttpFlashlightControl 
+          <HttpSmartlightControl 
             flashlightStatus={http.flashlightStatus}
-            toggleFlashlight={http.toggleFlashlight}
-            turnOnFlashlight={http.turnOnFlashlight}
-            turnOffFlashlight={http.turnOffFlashlight}
-            blinkFlashlight={http.blinkFlashlight}
+            toggleSmartlight={http.toggleSmartlight}
+            turnOnSmartlight={http.turnOnSmartlight}
+            turnOffSmartlight={http.turnOffSmartlight}
+            disableSmartlight={http.disableSmartlight}
+            blinkSmartlight={http.blinkSmartlight}
           />
         )}
         
-        {/* Gemini Chat Interface - Show when connected OR when explicitly toggled */}
-        {(isConnectedAny || isAiInterfaceVisible) && (
-          <div className="mb-4">
-            {!isConnectedAny && (
-              <div className="mb-3 p-2 bg-yellow-100 dark:bg-yellow-900/20 rounded text-sm text-yellow-700 dark:text-yellow-300">
-                <p className="flex items-center">
-                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  AI interface active without device connection. Device control commands will not work.
-                </p>
-              </div>
+        {/* Gemini Chat Interface */}
+        {(isAiInterfaceVisible || http.isConnected) && (
+          <div className="mb-6">
+            {/* Gemini Response Display */}
+            {gemini.geminiResponse && !gemini.isProcessing && (
+              <GeminiResponseDisplay geminiResponse={gemini.geminiResponse} />
             )}
             
-            <GeminiChat 
+            <GeminiChat
               isListening={speech.isListening}
               transcript={speech.transcript}
               geminiResponse={gemini.geminiResponse}
               isProcessing={gemini.isProcessing}
               isSpeechSupported={speech.isSpeechSupported}
               toggleMicrophone={speech.toggleMicrophone}
+              startPushToTalk={speech.startPushToTalk}
+              endPushToTalk={speech.endPushToTalk}
             />
           </div>
         )}

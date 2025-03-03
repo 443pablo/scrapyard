@@ -1,12 +1,8 @@
-'use client';
+"use client";
 
-import { useState, useCallback } from 'react';
-import { 
-  HttpState, 
-  HttpServices,
-  HttpResponse 
-} from '../types/http';
-import { useDebug } from './useDebug';
+import { useState, useCallback } from "react";
+import { HttpState, HttpServices, HttpResponse } from "../types/http";
+import { useDebug } from "./useDebug";
 
 export const useHttp = (): HttpState & HttpServices => {
   // HTTP state
@@ -14,7 +10,7 @@ export const useHttp = (): HttpState & HttpServices => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ipAddress, setIpAddress] = useState<string | null>(null);
-  const [flashlightStatus, setFlashlightStatus] = useState<{
+  const [flashlightStatus, setSmartlightStatus] = useState<{
     on: boolean;
     available: boolean;
   }>({ on: false, available: true });
@@ -23,141 +19,161 @@ export const useHttp = (): HttpState & HttpServices => {
   const { addDebug } = useDebug();
 
   // Helper function to handle errors
-  const handleError = useCallback((message: string, error: Error | unknown) => {
-    const errorMsg = `${message}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    addDebug(errorMsg);
-    setError(errorMsg);
-    return false;
-  }, [addDebug]);
+  const handleError = useCallback(
+    (message: string, error: Error | unknown) => {
+      const errorMsg = `${message}: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`;
+      addDebug(errorMsg);
+      setError(errorMsg);
+      return false;
+    },
+    [addDebug]
+  );
 
   // Helper function to make HTTP requests
-  const makeRequest = useCallback(async <T>(endpoint: string, method: 'GET' = 'GET'): Promise<T | null> => {
-    if (!ipAddress) {
-      addDebug('No IP address set. Please connect first.');
-      return null;
-    }
-
-    try {
-      const url = `http://${ipAddress}${endpoint}`;
-      addDebug(`Making ${method} request to ${url}`);
-      
-      setIsConnecting(true);
-      const response = await fetch(url, { method });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+  const makeRequest = useCallback(
+    async <T>(endpoint: string, method: "GET" = "GET"): Promise<T | null> => {
+      if (!ipAddress) {
+        addDebug("No IP address set. Please connect first.");
+        return null;
       }
-      
-      const data = await response.json() as T;
-      setIsConnecting(false);
-      setIsConnected(true);
-      setError(null);
-      return data;
-    } catch (e) {
-      setIsConnecting(false);
-      handleError(`Failed to ${method} ${endpoint}`, e);
-      return null;
-    }
-  }, [ipAddress, addDebug, handleError]);
+
+      try {
+        // Ensure we don't duplicate the port in the URL
+        let baseUrl = ipAddress;
+        
+        // If IP doesn't include a port already, add default port
+        if (!baseUrl.includes(':')) {
+          baseUrl = `${baseUrl}:5000`;
+        }
+        
+        const url = `http://${baseUrl}${endpoint}`;
+        addDebug(`Making ${method} request to ${url}`);
+
+        setIsConnecting(true);
+        const response = await fetch(url, { method });
+
+        if (!response.ok) {
+          throw new Error(
+            `HTTP error ${response.status}: ${response.statusText}`
+          );
+        }
+
+        const data = (await response.json()) as T;
+        setIsConnecting(false);
+        setIsConnected(true);
+        setError(null);
+        return data;
+      } catch (e) {
+        setIsConnecting(false);
+        handleError(`Failed to ${method} ${endpoint}`, e);
+        return null;
+      }
+    },
+    [ipAddress, addDebug, handleError]
+  );
 
   // Connect to the ESP32 HTTP server
-  const connectToDevice = useCallback(async (ip: string): Promise<void> => {
-    try {
-      setIsConnecting(true);
-      setError(null);
-      
-      // Store the IP address
-      setIpAddress(ip);
-      
-      // Test the connection by getting flashlight status
-      const status = await makeRequest<HttpResponse>('/flashlight/status');
-      
-      if (status) {
-        addDebug('HTTP connection established');
+  const connectToDevice = useCallback(
+    async (ip: string): Promise<void> => {
+      try {
+        setIsConnecting(true);
+        setError(null);
+
+        // Store the IP address
+        setIpAddress(ip);
+
+        // Establish HTTP connection
+        addDebug("HTTP connection established");
         setIsConnected(true);
-        
-        // Update flashlight status
-        if (status.flashlight !== undefined) {
-          setFlashlightStatus(prev => ({
-            ...prev,
-            on: Boolean(status.flashlight)
-          }));
-        }
-      } else {
-        throw new Error('Failed to get flashlight status');
+
+        setSmartlightStatus((prev) => ({
+          ...prev,
+          on: false,
+        }));
+      } catch (e) {
+        setIsConnected(false);
+        handleError("Failed to connect to device", e);
+      } finally {
+        setIsConnecting(false);
       }
-    } catch (e) {
-      setIsConnected(false);
-      handleError('Failed to connect to device', e);
-    } finally {
-      setIsConnecting(false);
-    }
-  }, [addDebug, makeRequest, handleError]);
+    },
+    [addDebug, handleError]
+  );
 
   // Function to toggle the flashlight
-  const toggleFlashlight = useCallback(async (): Promise<void> => {
-    const response = await makeRequest<HttpResponse>('/flashlight/toggle');
-    
+  const toggleSmartlight = useCallback(async (): Promise<void> => {
+    const response = await makeRequest<HttpResponse>("/toggle");
+
     if (response && response.flashlight !== undefined) {
-      setFlashlightStatus(prev => ({
+      setSmartlightStatus((prev) => ({
         ...prev,
-        on: Boolean(response.flashlight)
+        on: Boolean(response.flashlight),
       }));
-      addDebug(`Toggled flashlight: ${response.flashlight ? 'ON' : 'OFF'}`);
+      addDebug(`Toggled flashlight: ${response.flashlight ? "ON" : "OFF"}`);
     }
   }, [makeRequest, addDebug]);
 
   // Function to turn on the flashlight
-  const turnOnFlashlight = useCallback(async (): Promise<void> => {
-    const response = await makeRequest<HttpResponse>('/flashlight/on');
-    
+  const turnOnSmartlight = useCallback(async (): Promise<void> => {
+    const response = await makeRequest<HttpResponse>("/on");
+
     if (response && response.flashlight !== undefined) {
-      setFlashlightStatus(prev => ({
+      setSmartlightStatus((prev) => ({
         ...prev,
-        on: Boolean(response.flashlight)
+        on: Boolean(response.flashlight),
       }));
       addDebug(`Turned flashlight ON`);
     }
   }, [makeRequest, addDebug]);
 
-  // Function to turn off the flashlight
-  const turnOffFlashlight = useCallback(async (): Promise<void> => {
-    const response = await makeRequest<HttpResponse>('/flashlight/off');
-    
+  const disableSmartlight = useCallback(async (): Promise<void> => {
+    console.log("CHECKPOINT DISABLED??")
+    const response = await makeRequest<HttpResponse>("/disable");
+
     if (response && response.flashlight !== undefined) {
-      setFlashlightStatus(prev => ({
+      addDebug(`Disabled flashlight`);
+    }
+  }, [makeRequest, addDebug]);
+
+  // Function to turn off the flashlight
+  const turnOffSmartlight = useCallback(async (): Promise<void> => {
+    const response = await makeRequest<HttpResponse>("/off");
+
+    if (response && response.flashlight !== undefined) {
+      setSmartlightStatus((prev) => ({
         ...prev,
-        on: Boolean(response.flashlight)
+        on: Boolean(response.flashlight),
       }));
       addDebug(`Turned flashlight OFF`);
     }
   }, [makeRequest, addDebug]);
 
   // Function to make the flashlight blink
-  const blinkFlashlight = useCallback(async (intervalMs: number): Promise<void> => {
-    const response = await makeRequest<HttpResponse>(`/flashlight/blink?interval=${intervalMs}`);
-    
-    if (response) {
-      addDebug(`Started flashlight blinking (interval: ${intervalMs}ms)`);
-    }
-  }, [makeRequest, addDebug]);
+  const blinkSmartlight = useCallback(
+    async (intervalMs: number): Promise<void> => {
+      const response = await makeRequest<HttpResponse>(
+        `/flash?interval=${intervalMs}`
+      );
+
+      if (response) {
+        addDebug(`Started flashlight blinking (interval: ${intervalMs}ms)`);
+      }
+    },
+    [makeRequest, addDebug]
+  );
 
   // Function to get the flashlight status
-  const getFlashlightStatus = useCallback(async (): Promise<void> => {
-    const response = await makeRequest<HttpResponse>('/flashlight/status');
-    
-    if (response && response.flashlight !== undefined) {
-      setFlashlightStatus(prev => ({
-        ...prev,
-        on: Boolean(response.flashlight)
-      }));
-      addDebug(`Flashlight status: ${response.flashlight ? 'ON' : 'OFF'}`);
-    }
-  }, [makeRequest, addDebug]);
+  const getSmartlightStatus = useCallback(async (): Promise<void> => {
+    // Status endpoint is not available, so we'll just maintain API compatibility
+    addDebug('Smartlight status check - no endpoint available');
+    // No requests are made
+  }, [addDebug]);
 
   // Disconnect (simply reset state since HTTP is stateless)
   const disconnectDevice = useCallback(() => {
-    addDebug('Disconnecting HTTP client');
+    addDebug("Disconnecting HTTP client");
     setIsConnected(false);
     setIpAddress(null);
   }, [addDebug]);
@@ -168,12 +184,13 @@ export const useHttp = (): HttpState & HttpServices => {
     error,
     flashlightStatus,
     ipAddress,
+    disableSmartlight,
     connectToDevice,
     disconnectDevice,
-    toggleFlashlight,
-    turnOnFlashlight,
-    turnOffFlashlight,
-    blinkFlashlight,
-    getFlashlightStatus
+    toggleSmartlight,
+    turnOnSmartlight,
+    turnOffSmartlight,
+    blinkSmartlight,
+    getSmartlightStatus,
   };
-}; 
+};

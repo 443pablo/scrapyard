@@ -9,6 +9,8 @@ export interface SpeechServices {
   toggleMicrophone: () => Promise<void>;
   startListening: () => Promise<void>;
   stopListening: () => void;
+  startPushToTalk: () => Promise<void>;
+  endPushToTalk: () => Promise<void>;
 }
 
 // Note: SpeechRecognition and related types are globally defined in types/global.d.ts 

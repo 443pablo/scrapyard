@@ -21,7 +21,7 @@ export interface BluetoothState {
 export interface BluetoothServices {
   connectToDevice: () => Promise<void>;
   sendCommand: (command: string, params?: Record<string, unknown>) => Promise<boolean>;
-  toggleFlashlight: () => Promise<void>;
+  toggleSmartlight: () => Promise<void>;
 }
 
 // Note: BluetoothDevice and other types are globally defined in types/global.d.ts 

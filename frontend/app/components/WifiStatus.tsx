@@ -17,8 +17,8 @@ export const WifiStatus: React.FC<WifiStatusProps> = ({ wifiStatus }) => {
 
   return (
     <div className={`mb-6 p-4 ${wifiStatus.connected ? 
-      'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 
-      'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'} rounded-lg`}>
+      'bg-green-100 text-green-700 ' : 
+      'bg-red-100 text-red-700'} rounded-lg`}>
       <h3 className="font-medium mb-2">WiFi Status</h3>
       <p>{wifiStatus.connected ? 'Connected' : 'Disconnected'}</p>
       {wifiStatus.message && <p className="text-sm mt-1">{wifiStatus.message}</p>}

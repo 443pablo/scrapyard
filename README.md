@@ -1,4 +1,4 @@
-# 🔦 Scrapyard Flashlight
+# 🔦 Scrapyard Smartlight
 
 An overengineered flashlight app created at Hack Club's Scrapyard event (March 2025). Because why should a flashlight just... turn on and off?
 
